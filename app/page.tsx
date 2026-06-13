@@ -3,7 +3,7 @@
 import { DropZone } from '@/components/upload/DropZone';
 import { VideoPreview } from '@/components/upload/VideoPreview';
 import { AnalysisCard } from '@/components/analysis/AnalysisCard';
-import { AudioPlayer } from '@/components/player/AudioPlayer';
+import { ScoreOutput } from '@/components/player/ScoreOutput';
 import { DownloadButton } from '@/components/player/DownloadButton';
 import { StemPlayer } from '@/components/player/StemPlayer';
 import { useWorkflow } from '@/hooks/useWorkflow';
@@ -78,7 +78,7 @@ const STEP_ORDER: Record<string, number> = {
 
 export default function Home() {
   const { state, selectFile, removeFile, upload, analyze, generate, separateStems, reset } = useWorkflow();
-  const { step, videoFile, videoObjectUrl, analysis, score, error, stemStep, stems, stemError } = state;
+  const { step, videoFile, videoObjectUrl, originalAudioUrl, analysis, score, error, stemStep, stems, stemError } = state;
 
   const isUploading = step === 'uploading';
   const isAnalyzing = step === 'analyzing';
@@ -279,7 +279,11 @@ export default function Home() {
               )}
             </div>
 
-            <AudioPlayer src={score.audioUrl} />
+            <ScoreOutput
+              score={score}
+              videoSrc={videoObjectUrl ?? ''}
+              originalAudioUrl={originalAudioUrl}
+            />
             <DownloadButton score={score} />
 
             {/* Stem separation */}

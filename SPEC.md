@@ -38,7 +38,7 @@ Each step renders a distinct UI section below the previous. The page does not na
 | `analyzing` | Video preview + step indicator + analysis spinner |
 | `analyzed` | Video preview + step indicator + analysis card + "Generate Score →" button |
 | `generating` | Video preview + step indicator + analysis card + generation spinner |
-| `completed` | Video preview + step indicator + analysis card + score section (player + download) |
+| `completed` | Video preview + step indicator + analysis card + score section (tabbed output panel — score-only / video+score — + download + stems) |
 
 On error at any step: an error banner appears with a "Retry" button (for analyze/generate failures) and a "Start Over" button. On error, the step regresses to the previous stable step (`uploaded` after analyze failure, `analyzed` after generate failure).
 
@@ -71,7 +71,7 @@ On error at any step: an error banner appears with a "Retry" button (for analyze
 │   ├── providers.tsx                  # 'use client' TanStack QueryClientProvider wrapper
 │   ├── globals.css                    # Tailwind imports, CSS vars, fadeIn keyframe
 │   └── api/
-│       ├── upload/route.ts            # POST — receives video, saves to disk
+│       ├── upload/route.ts            # POST — receives video, saves to disk, extracts original audio (ffmpeg)
 │       ├── analyze/route.ts           # POST — returns AnalysisResult
 │       └── generate/route.ts          # POST — returns GeneratedScore
 ├── components/
@@ -83,7 +83,10 @@ On error at any step: an error banner appears with a "Retry" button (for analyze
 │   │   ├── AnalysisCard.tsx           # Overall profile summary card
 │   │   └── TimelineBar.tsx            # Colored segment timeline bar
 │   ├── player/
-│   │   ├── AudioPlayer.tsx            # Custom player (play/pause/seek/waveform)
+│   │   ├── ScoreOutput.tsx            # Tabbed output panel: Generated Score | Video + Score
+│   │   ├── AudioPlayer.tsx            # Custom audio player (play/pause/seek/waveform)
+│   │   ├── CombinedVideoPlayer.tsx    # Video synced to generated score + original-audio toggle
+│   │   ├── StemPlayer.tsx             # Per-stem mini player grid
 │   │   └── DownloadButton.tsx         # Direct anchor download
 │   └── ui/                            # shadcn generated components (do not edit)
 ├── lib/
@@ -100,7 +103,9 @@ On error at any step: an error banner appears with a "Retry" button (for analyze
 │   │       ├── ElevenLabsProvider.ts     # ElevenLabs Sound Generation API (/v1/sound-generation)
 │   │       └── ElevenMusicProvider.ts    # ElevenLabs Music API (/v1/music, composition plan)
 │   ├── audio/
-│   │   └── generateTone.ts            # PCM synthesis + lamejs MP3 encoding (mock only)
+│   │   ├── generateTone.ts            # PCM synthesis + lamejs MP3 encoding (mock only)
+│   │   ├── ffmpegEnv.ts               # resolvedPath() — Windows PATH merge (shared by Demucs + extractor)
+│   │   └── extractOriginalAudio.ts    # ffmpeg: original audio track → browser-playable MP3 (best-effort)
 │   └── utils.ts                       # cn, formatDuration, formatFileSize, seededRandom,
 │                                      #   hashString, generateId, delay
 ├── hooks/
@@ -246,9 +251,13 @@ export interface WorkflowState {
   videoObjectUrl: string | null;        // created via URL.createObjectURL()
   uploadedVideoPath: string | null;     // absolute server filesystem path
   uploadedMetadata: VideoMetadata | null;
+  originalAudioUrl: string | null;      // ffmpeg-extracted browser-playable original audio (or null)
   analysis: AnalysisResult | null;
   score: GeneratedScore | null;
   error: string | null;
+  stemStep: StemStep;                   // stem-separation sub-state machine
+  stems: StemResult | null;
+  stemError: string | null;
 }
 ```
 
@@ -261,9 +270,11 @@ export interface WorkflowState {
 - Accepts: `multipart/form-data` with `video` field and optional `durationSeconds` field (string, supplied by the client)
 - Validates: MIME type must be one of `video/mp4`, `video/quicktime`, `video/webm`; max 100 MB
 - Saves to: `public/uploads/{uuid}.{ext}` using `fs.writeFileSync`
-- Returns: `{ videoPath: string, filename: string, sizeBytes: number, durationSeconds?: number }`
+- After saving, calls `extractOriginalAudio(fullPath, id)` — ffmpeg transcodes the video's original audio track to `public/uploads/{uuid}-original.mp3` so it is browser-playable. **Best-effort and non-fatal**: yields `undefined` (never throws) when the source has no audio stream or ffmpeg is unavailable.
+- Returns: `{ videoPath: string, filename: string, sizeBytes: number, durationSeconds?: number, originalAudioUrl?: string }`
 - `videoPath` is the absolute filesystem path passed verbatim to the analysis provider
 - `durationSeconds` is echoed back only when finite and `> 0`
+- `originalAudioUrl` is `/uploads/{uuid}-original.mp3` when extraction succeeded, else omitted
 - Errors return a generic `'Upload failed. Please try again.'` (this route does **not** surface raw error messages, unlike analyze/generate)
 
 ### POST `/api/analyze`
@@ -518,6 +529,29 @@ Generates real audio content from the analysis. Signature: `generateMp3(analysis
 - Time display: `{formatDuration(currentTime)} / {formatDuration(duration)}`
 - Shows "Loading audio…" in `text-cream-400` while `!isLoaded`
 
+### ScoreOutput
+
+The output panel shown at the `completed` step (replaces the bare `AudioPlayer`). Props: `{ score: GeneratedScore; videoSrc: string; originalAudioUrl: string | null }`.
+
+- `'use client'`; local UI state only: `tab: 'audio' | 'combined'` and `includeOriginalAudio: boolean` (default **false**, so the pure generated score is heard first). Derives `hasOriginalAudio` from `originalAudioUrl`.
+- **Top tab bar** with two tabs — **"Generated Score"** (the standalone `AudioPlayer`) and **"Video + Score"** (the `CombinedVideoPlayer`). The active tab is banana-filled (`bg-[#ffcc18] text-navy-950`).
+- Only the **active** tab is mounted — switching tabs unmounts the inactive player, tearing down its media so there is never overlapping audio.
+- **Bottom-right toggle switch "Include original audio"** is rendered only on the combined tab. When `hasOriginalAudio` is false it is **disabled** and relabeled "Original video has no usable audio track". It drives `CombinedVideoPlayer`'s `includeOriginalAudio` prop.
+- If `videoSrc` is empty (no original video available), it degrades to rendering the `AudioPlayer` alone — no tabs.
+
+### CombinedVideoPlayer
+
+Plays the original video in sync with the generated score (and, optionally, the original audio) under one transport. Props: `{ videoSrc: string; audioSrc: string; originalAudioUrl: string | null; includeOriginalAudio: boolean }`.
+
+- **Why a separate original-audio track:** browsers ship only a few audio decoders, so a clip whose audio is e.g. **AC-3 / E-AC-3 or PCM-in-MOV** plays its video but is silent — the bytes aren't stripped, the browser just can't decode them. So the upload step extracts the original audio to a browser-playable MP3 with ffmpeg (`extractOriginalAudio`) and this player plays *that*, rather than relying on the `<video>`'s own (often undecodable) audio.
+- `'use client'`; refs `videoRef`, `scoreRef`, `originalRef`; custom transport styled to match `AudioPlayer` (banana play/pause circle, gradient seek bar, `mm:ss / mm:ss` readout). No native `<video controls>`.
+- **The `<video>` is ALWAYS muted** — it provides frames + the master clock only. Audio comes solely from the slaved `<audio>` elements: the generated score (always audible) and the original audio (rendered only when `originalAudioUrl` is non-null).
+- **Video is the master clock.** Play/pause acts on the video + every slaved audio (aligned to the video's `currentTime` first); seeking sets `currentTime` on all; on the video's `timeupdate` each slaved audio is **drift-corrected** (snapped back if `|a.currentTime − video.currentTime| > 0.25s`).
+- `includeOriginalAudio` sets `originalRef.muted = !includeOriginalAudio` live (no playback interruption); the score `<audio>` is always audible.
+- Controls disabled until **video + score** report `loadedmetadata` (`videoReady && scoreReady`); the original-audio track is not gated on, so a slow/absent extra track never blocks playback. Shows "Loading video…" until then.
+- On video `ended`, every element pauses and resets to 0. On unmount, all are paused.
+- Score/video length mismatch is tolerated: the video duration is the timeline; a shorter track simply ends early, a longer one is cut at video end.
+
 ### DownloadButton
 
 - `<a href={score.audioUrl} download={score.filename} className="block">` wrapping shadcn `<Button size="lg">`
@@ -600,8 +634,9 @@ The page is `'use client'`. It computes `STEP_ORDER` (numeric values per step) t
 - Divider with "Your Score" label
 - Metadata badges: Mood, Genre, BPM, Duration
 - Generation prompt box (italic `cream-200` text in a `bg-navy-950/50` box)
-- `<AudioPlayer src={score.audioUrl} />`
+- `<ScoreOutput score={score} videoSrc={videoObjectUrl ?? ''} originalAudioUrl={originalAudioUrl} />` — tabbed score-only / video+score panel (the original video is still available in-browser via the persisted `videoObjectUrl`; `originalAudioUrl` is the ffmpeg-extracted, browser-playable original audio)
 - `<DownloadButton score={score} />`
+- Stem separation controls (Split into Stems → / spinner / error / `<StemPlayer>`)
 - "Score another video" link → `reset()`
 
 ### Error banner
@@ -722,7 +757,8 @@ A user can:
 7. Click "Generate Score" and receive a real, playable MP3 (ElevenLabs or mock)
 8. See the generation prompt that was used in a styled box
 9. Play, pause, and seek through the audio in the custom player with waveform visualization
-10. Download the MP3 via direct anchor download
+10. Switch to the "Video + Score" tab to watch the original video in sync with the generated score, and toggle "Include original audio" to A/B the pure score against the score layered over the video's own audio
+11. Download the MP3 via direct anchor download
 
 Additionally:
 - `npm run build` succeeds with zero TypeScript errors

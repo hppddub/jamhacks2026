@@ -43,7 +43,9 @@ jamhacks2026/
 │   │   ├── AnalysisCard.tsx               ← overall profile card
 │   │   └── TimelineBar.tsx                ← horizontal colored segment timeline
 │   ├── player/
+│   │   ├── ScoreOutput.tsx                ← tabbed output panel (Generated Score | Video + Score) + original-audio toggle
 │   │   ├── AudioPlayer.tsx                ← custom HTML Audio API player + waveform
+│   │   ├── CombinedVideoPlayer.tsx        ← original video synced to generated score; live mute toggle for original audio
 │   │   ├── DownloadButton.tsx
 │   │   └── StemPlayer.tsx                 ← per-stem mini player grid
 │   └── ui/                                ← shadcn/ui generated (never edit manually)
@@ -70,7 +72,9 @@ jamhacks2026/
 │   │       ├── LocalDemucsProvider.ts     ← free: runs python -m demucs as subprocess
 │   │       └── ReplicateProvider.ts       ← Replicate Demucs v4 stem separation (costs $)
 │   ├── audio/
-│   │   └── generateTone.ts               ← PCM synthesis + lamejs MP3 encoding; generateStemMp3 for mock stems
+│   │   ├── generateTone.ts               ← PCM synthesis + lamejs MP3 encoding; generateStemMp3 for mock stems
+│   │   ├── ffmpegEnv.ts                  ← resolvedPath(): merges Windows HKCU PATH so winget ffmpeg is found (shared by Demucs + extractor)
+│   │   └── extractOriginalAudio.ts       ← ffmpeg: transcode a video's original audio track to browser-playable MP3 (best-effort)
 │   └── utils.ts                           ← cn, formatDuration, formatFileSize,
 │                                          ←   seededRandom, hashString, generateId, delay
 ├── types/
@@ -202,11 +206,17 @@ const defaultState: WorkflowState = {
   videoObjectUrl: null,
   uploadedVideoPath: null,
   uploadedMetadata: null,
+  originalAudioUrl: null,   // ffmpeg-extracted browser-playable original audio (or null)
   analysis: null,
   score: null,
   error: null,
+  stemStep: 'idle',
+  stems: null,
+  stemError: null,
 };
 ```
+
+`originalAudioUrl` is set from the upload response (`data.originalAudioUrl ?? null`), persists through to the `completed` step, and is cleared by `reset()`/`removeFile()` (which reset to `defaultState`). It feeds the "Video + Score" tab's original-audio track.
 
 ### useWorkflow Exports
 ```ts
@@ -745,9 +755,11 @@ export async function POST(request: Request) {
 - `fs.mkdirSync(uploadDir, { recursive: true })` before writing
 - `fs.writeFileSync(fullPath, Buffer.from(await file.arrayBuffer()))`
 - `durationSeconds` is `parseFloat`'d and only echoed back when finite and `> 0`, else `undefined`
-- Returns: `{ videoPath: string, filename: string, sizeBytes: number, durationSeconds?: number }`
+- **Original-audio extraction:** after writing the video, calls `extractOriginalAudio(fullPath, id)` (ffmpeg → browser-playable MP3 at `public/uploads/{id}-original.mp3`). This is **best-effort and non-fatal** — returns `undefined` (and does not throw) when the source has no audio stream, ffmpeg is missing, or anything fails, so it never breaks an upload.
+- Returns: `{ videoPath: string, filename: string, sizeBytes: number, durationSeconds?: number, originalAudioUrl?: string }`
   - `videoPath` is the absolute filesystem path — passed verbatim to the analyzer
   - `filename` is `file.name` (the original user filename)
+  - `originalAudioUrl` is `/uploads/{id}-original.mp3` when extraction succeeded, else omitted/`undefined`
 - **Error handling exception:** this route returns a generic `'Upload failed. Please try again.'` (status 500) — it does **not** surface the raw error message (unlike analyze/generate).
 
 ### POST `/api/analyze`
@@ -845,6 +857,26 @@ export async function POST(request: Request) {
 - Shows "Loading audio…" (`text-cream-400`) when `!isLoaded`
 - `togglePlay` is `async` — catches errors from `audio.play()` silently
 
+### ScoreOutput (`components/player/ScoreOutput.tsx`)
+- `'use client'`. Accepts `{ score: GeneratedScore; videoSrc: string; originalAudioUrl: string | null }`. This is what the `completed` step renders in place of a bare `AudioPlayer`.
+- Local UI state only (no workflow/hook state): `tab: 'audio' | 'combined'` (default `'audio'`) and `includeOriginalAudio: boolean` (**default `false`** — pure generated score first).
+- Derives `hasOriginalAudio = originalAudioUrl !== null && originalAudioUrl.length > 0`.
+- **Tab bar** (banana-filled active tab `bg-[#ffcc18] text-navy-950`): "Generated Score" → `<AudioPlayer src={score.audioUrl} />`; "Video + Score" → `<CombinedVideoPlayer …/>`.
+- **Only the active tab is mounted** (conditional render, not hidden) — unmounting the inactive player tears down its `<audio>`/`<video>` so there is never overlapping audio when switching tabs.
+- **Bottom-right toggle switch** "Include original audio" (`role="switch"`, `aria-checked`) rendered **only on the combined tab**. When `hasOriginalAudio` is false it is **disabled** and the label changes to "Original video has no usable audio track" (`text-cream-500`, `opacity-40`). It drives `CombinedVideoPlayer`'s `includeOriginalAudio` (passed as `hasOriginalAudio && includeOriginalAudio`).
+- **Graceful fallback:** when `videoSrc === ''` (no original video available), it returns just `<AudioPlayer src={score.audioUrl} />` with no tabs. Page passes `videoObjectUrl ?? ''` (the object URL persists from `selectFile` through `completed`, so it is normally present).
+
+### CombinedVideoPlayer (`components/player/CombinedVideoPlayer.tsx`)
+- `'use client'`. Accepts `{ videoSrc: string; audioSrc: string; originalAudioUrl: string | null; includeOriginalAudio: boolean }`.
+- **Why the original audio is a separate track, not the `<video>`'s own audio:** browsers ship only a few audio decoders, so an uploaded clip whose audio is e.g. **AC-3 / E-AC-3 or PCM-in-MOV** plays its video track but is **silent** — the bytes aren't stripped, the browser just can't decode them. Toggling `video.muted` therefore can't produce sound for those files. Instead, the upload step extracts the original audio to a browser-playable MP3 via ffmpeg (`extractOriginalAudio`), and this player plays **that** as a slaved track.
+- Refs: `videoRef`, `scoreRef` (generated score), `originalRef` (extracted original audio, only rendered when `originalAudioUrl` is non-null). Custom transport styled to match `AudioPlayer` (banana play/pause circle, gradient seek bar, `mm:ss / mm:ss` readout); the `<video>` has **no native `controls`**.
+- **The `<video>` is ALWAYS muted** (`muted` attr + a `[videoSrc]` effect forcing `video.muted = true`); it provides frames + the master clock only. Audio always comes from the slaved `<audio>` elements.
+- **Master clock = video.** `togglePlay` plays/pauses the video + every slaved audio (aligned to the video's `currentTime` first); `handleSeek` sets `currentTime` on all three; on the video's `timeupdate` each slaved audio is **drift-corrected** (`if |a.currentTime − video.currentTime| > 0.25 → a.currentTime = video.currentTime`, the `DRIFT_TOLERANCE_SECONDS` constant).
+- A `useEffect` keyed on `[includeOriginalAudio, originalAudioUrl]` sets `originalRef.muted = !includeOriginalAudio` **live** (no playback interruption). The score `<audio>` is always audible; the original-audio `<audio>` is muted/unmuted instantly.
+- Controls disabled until **video + score** both fire `loadedmetadata` (`videoReady && scoreReady` — the original-audio track is not gated on, so a slow/absent extra track never blocks playback). Shows "Loading video…" until then; video `duration` is the displayed timeline.
+- `video` `pause`/`play` listeners keep all slaved audios in lockstep; on `ended` everything pauses and resets to 0; on unmount all elements are paused (refs copied into the effect for a clean teardown).
+- Score/video length mismatch is tolerated by design — video is the timeline; a shorter track ends early, a longer one is cut at video end. No time-stretching.
+
 ### DownloadButton
 - Accepts `{ score: GeneratedScore }`
 - `<a href={score.audioUrl} download={score.filename} className="block">` wrapping shadcn `<Button size="lg">`
@@ -880,7 +912,7 @@ A step circle at position `i+1` (1-indexed) is "done" when `currentOrder > i+1`,
 - **AnalysisCard** (`analysis && step ∈ ['analyzed', 'generating', 'completed']`)
 - **"Generate Score →"** (`step === 'analyzed' && !error`): triggers `generate()`.
 - **Generation spinner** (`isGenerating`): label "Composing your score with ElevenLabs…"
-- **Score section** (`score && step === 'completed'`): divider, score metadata badges, prompt box, AudioPlayer, DownloadButton, "Score another video" link.
+- **Score section** (`score && step === 'completed'`): divider, score metadata badges, prompt box, `ScoreOutput` (tabbed Generated Score / Video + Score panel — receives `videoSrc={videoObjectUrl ?? ''}` and `originalAudioUrl={originalAudioUrl}`), DownloadButton, stem-separation controls, "Score another video" link.
 
 ---
 
@@ -1025,11 +1057,13 @@ If env vars are absent, all factories default to `'mock'`. No API keys needed fo
 | `GEMINI_API_KEY` | — | Required when `ANALYSIS_PROVIDER=gemini` |
 | `STEM_PROVIDER` | `mock` | `mock`, `local`, `replicate` |
 | `DEMUCS_PYTHON_CMD` | `python` | Override Python executable when `STEM_PROVIDER=local` (e.g. `python3`) |
+| `FFMPEG_CMD` | `ffmpeg` | Override the ffmpeg executable used by `extractOriginalAudio` (original-audio extraction at upload) |
 | `REPLICATE_API_KEY` | — | Required when `STEM_PROVIDER=replicate` |
 | `REPLICATE_MODEL_VERSION` | — | Required when `STEM_PROVIDER=replicate`; find hash at replicate.com/lucataco/demucs |
 ### Notes
 - **`ANALYSIS_PROVIDER` is no longer read.** Analysis is hardcoded to Gemini, so `GEMINI_API_KEY` is effectively required to use the app end-to-end. (`.env.example` no longer lists `ANALYSIS_PROVIDER`.)
 - Only the **music** factory still branches on an env var (`MUSIC_PROVIDER`, default `'mock'`).
+- **ffmpeg** (in PATH, or set `FFMPEG_CMD`) is used by both `STEM_PROVIDER=local` (Demucs) and the upload step's original-audio extraction. It is **optional** for upload: if absent, uploads still succeed and the "Video + Score" tab simply shows the original-audio toggle disabled. On Windows, `resolvedPath()` merges the user registry PATH so a freshly-winget-installed ffmpeg is found without restarting the dev server.
 
 | Var | Default | Options | Notes |
 |---|---|---|---|
@@ -1213,6 +1247,8 @@ All phases are complete. This checklist reflects the completed state.
 - [x] `components/analysis/TimelineBar.tsx`
 - [x] `components/analysis/AnalysisCard.tsx`
 - [x] `components/player/AudioPlayer.tsx`
+- [x] `components/player/ScoreOutput.tsx` (tabbed Generated Score / Video + Score panel + original-audio toggle)
+- [x] `components/player/CombinedVideoPlayer.tsx` (video synced to generated score, master-clock + drift correction)
 - [x] `components/player/DownloadButton.tsx`
 
 ### Phase 7 — App Shell ✅
