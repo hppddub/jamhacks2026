@@ -33,6 +33,8 @@ export interface TimelineSegment {
   energyLevel: EnergyLevel;
   label: string;
   audioNote?: string;
+  valence?: number;
+  arousal?: number;
 }
 
 export type ColorPalette = 'warm' | 'cool' | 'dark' | 'bright' | 'neutral';
@@ -47,6 +49,29 @@ export type DialogueTone = 'formal' | 'casual' | 'emotional' | 'tense' | 'upbeat
 export type DialogueSentiment = 'positive' | 'neutral' | 'negative' | 'mixed';
 export type SoundTexture = 'sharp' | 'blunt' | 'soft' | 'layered' | 'sparse';
 export type VolumeDynamics = 'consistent' | 'building' | 'dropping' | 'erratic' | 'dynamic';
+
+export type DrumStyle =
+  | 'none'
+  | 'acoustic-kit'
+  | 'brushed-jazz'
+  | 'lo-fi-compressed'
+  | 'electronic-808'
+  | 'orchestral-bass-drum';
+
+export type VocalPresence =
+  | 'none'
+  | 'choir-pads'
+  | 'backing-harmonies'
+  | 'vocal-chops'
+  | 'humming'
+  | 'scat';
+
+export interface InstrumentSpec {
+  drums: string[];
+  bass: string[];
+  vocals: string[];
+  melody: string[];
+}
 
 export interface VideoAnalysis {
   mood: Mood;
@@ -79,6 +104,9 @@ export interface VideoAnalysis {
   volumeDynamics?: VolumeDynamics;
   audioSummary?: string;
   audioDialogueDominant?: boolean;
+  drumsAppropriate?: boolean;
+  drumStyle?: DrumStyle;
+  vocalPresence?: VocalPresence;
 }
 
 export interface AnalysisResult {
@@ -119,6 +147,8 @@ export interface GeneratedScore {
   mood: Mood;
   filename: string;
   prompt: string;
+  backendPrompt: string;
+  instrumentSpec: InstrumentSpec;
   sections?: ScoreSection[];       // populated by ElevenMusicProvider (composition-plan sections)
 }
 

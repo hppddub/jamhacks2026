@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import type { WorkflowState, VideoMetadata, AnalysisResult, GeneratedScore, StemResult } from '@/types';
+import type { WorkflowState, VideoMetadata, AnalysisResult, GeneratedScore, StemResult, InstrumentSpec } from '@/types';
 
 const defaultState: WorkflowState = {
   step: 'idle',
@@ -92,11 +92,11 @@ export function useWorkflow() {
 
   // ── Stems ────────────────────────────────────────────────────────────────────
   const stemsMutation = useMutation({
-    mutationFn: async (audioUrl: string) =>
+    mutationFn: async (payload: { audioUrl: string; instrumentSpec?: InstrumentSpec }) =>
       apiFetch<StemResult>('/api/stems', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioUrl }),
+        body: JSON.stringify(payload),
       }),
     onSuccess: (data) => {
       setState((prev) => ({ ...prev, stemStep: 'stems_ready', stems: data, stemError: null }));
@@ -174,7 +174,10 @@ export function useWorkflow() {
   const separateStems = useCallback(() => {
     if (!state.score) return;
     setState((prev) => ({ ...prev, stemStep: 'separating', stemError: null }));
-    stemsMutation.mutate(state.score.audioUrl);
+    stemsMutation.mutate({
+      audioUrl: state.score.audioUrl,
+      instrumentSpec: state.score.instrumentSpec,
+    });
   }, [state.score, stemsMutation]);
 
   const reset = useCallback(() => {

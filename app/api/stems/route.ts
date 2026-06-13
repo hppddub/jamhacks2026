@@ -1,12 +1,13 @@
 import { NextResponse } from 'next/server';
 import { getStemProvider } from '@/lib/providers/stems/factory';
+import type { InstrumentSpec } from '@/types';
 
 // Allow up to 3 minutes — required for Replicate polling in serverless environments
 export const maxDuration = 180;
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json() as { audioUrl?: unknown };
+    const body = await request.json() as { audioUrl?: unknown; instrumentSpec?: InstrumentSpec };
 
     if (typeof body.audioUrl !== 'string' || !body.audioUrl.startsWith('/generated/')) {
       return NextResponse.json(
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const result = await getStemProvider().separate(body.audioUrl);
+    const result = await getStemProvider().separate(body.audioUrl, body.instrumentSpec);
     return NextResponse.json(result);
   } catch (error) {
     console.error('[/api/stems]', error);
