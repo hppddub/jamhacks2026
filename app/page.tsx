@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { DropZone } from '@/components/upload/DropZone';
 import { VideoPreview } from '@/components/upload/VideoPreview';
 import { AnalysisCard } from '@/components/analysis/AnalysisCard';
@@ -8,6 +9,7 @@ import { DownloadButton } from '@/components/player/DownloadButton';
 import { StemPlayer } from '@/components/player/StemPlayer';
 import { useWorkflow } from '@/hooks/useWorkflow';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { VideoScorePlayer } from '@/components/player/VideoScorePlayer';
 
 function Spinner({ label }: { label: string }) {
   return (
@@ -86,6 +88,7 @@ export default function Home() {
   const isLoading = isUploading || isAnalyzing || isGenerating;
 
   const currentOrder = STEP_ORDER[step] ?? -1;
+  const [scoreTab, setScoreTab] = useState<'score' | 'video'>('score');
 
   return (
     <div className="min-h-screen bg-navy-950 text-cream-50">
@@ -339,7 +342,37 @@ export default function Home() {
               )}
             </div>
 
-            <AudioPlayer src={score.audioUrl} />
+            {/* Tab switcher */}
+            <div className="flex rounded-lg border border-navy-700 bg-navy-900 p-1">
+              <button
+                onClick={() => setScoreTab('score')}
+                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                  scoreTab === 'score'
+                    ? 'bg-[#ffcc18] text-navy-950'
+                    : 'text-cream-300 hover:text-cream-100'
+                }`}
+              >
+                Score Only
+              </button>
+              <button
+                onClick={() => setScoreTab('video')}
+                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                  scoreTab === 'video'
+                    ? 'bg-[#ffcc18] text-navy-950'
+                    : 'text-cream-300 hover:text-cream-100'
+                }`}
+              >
+                Score + Video
+              </button>
+            </div>
+
+            {scoreTab === 'score' ? (
+              <AudioPlayer src={score.audioUrl} />
+            ) : (
+              videoObjectUrl && (
+                <VideoScorePlayer videoUrl={videoObjectUrl} audioSrc={score.audioUrl} />
+              )
+            )}
             <DownloadButton score={score} />
 
             {/* Stem separation */}

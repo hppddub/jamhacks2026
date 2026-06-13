@@ -141,6 +141,7 @@ export interface WorkflowState {
   step: WorkflowStep;
   videoFile: File | null;
   videoObjectUrl: string | null;
+  videoDurationSeconds: number | null;
   uploadedVideoPath: string | null;
   uploadedMetadata: VideoMetadata | null;
   analysis: AnalysisResult | null;

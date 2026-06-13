@@ -7,7 +7,7 @@ import { generateId, delay } from '@/lib/utils';
 
 export class MockMusicProvider implements MusicGenerationProvider {
   async generate(result: AnalysisResult): Promise<GeneratedScore> {
-    const { analysis } = result;
+    const { analysis, metadata } = result;
     const prompt = buildPrompt(result);
     const id = generateId();
     const outputPath = path.join(process.cwd(), 'public', 'generated', `${id}.mp3`);

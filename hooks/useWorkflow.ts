@@ -8,6 +8,7 @@ const defaultState: WorkflowState = {
   step: 'idle',
   videoFile: null,
   videoObjectUrl: null,
+  videoDurationSeconds: null,
   uploadedVideoPath: null,
   uploadedMetadata: null,
   analysis: null,
@@ -133,8 +134,18 @@ export function useWorkflow() {
       step: 'idle',
       videoFile: file,
       videoObjectUrl: objectUrl,
+      videoDurationSeconds: null,
       error: null,
     }));
+
+    // Read duration from the video file before upload
+    const tempVideo = document.createElement('video');
+    tempVideo.preload = 'metadata';
+    tempVideo.onloadedmetadata = () => {
+      const dur = isFinite(tempVideo.duration) ? tempVideo.duration : null;
+      setState((prev) => ({ ...prev, videoDurationSeconds: dur }));
+    };
+    tempVideo.src = objectUrl;
   }, []);
 
   /** Clear the selected file and return to empty idle state. */
