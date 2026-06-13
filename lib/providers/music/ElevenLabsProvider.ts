@@ -1,21 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import { ElevenLabsClient } from '@elevenlabs/elevenlabs-js';
+import { ElevenLabsClient } from 'elevenlabs';
 import type { MusicGenerationProvider } from '../types';
 import type { AnalysisResult, GeneratedScore } from '@/types';
-import { buildPrompt, buildTags } from './buildPrompt';
+import { buildPrompt } from './buildPrompt';
 import { generateId } from '@/lib/utils';
-
-// Derive MIME type from video file extension
-function videoContentType(filePath: string): string {
-  const ext = path.extname(filePath).toLowerCase();
-  const map: Record<string, string> = {
-    '.mp4': 'video/mp4',
-    '.mov': 'video/quicktime',
-    '.webm': 'video/webm',
-  };
-  return map[ext] ?? 'video/mp4';
-}
 
 export class ElevenLabsProvider implements MusicGenerationProvider {
   private client: ElevenLabsClient;
@@ -30,37 +19,20 @@ export class ElevenLabsProvider implements MusicGenerationProvider {
   }
 
   async generate(result: AnalysisResult): Promise<GeneratedScore> {
-    const { analysis, videoPath, metadata } = result;
+    const { analysis, metadata } = result;
     const prompt = buildPrompt(result);
-    const tags = buildTags(result);
 
-    // Send the actual video file to ElevenLabs — it analyses the visual content
-    // and generates music that matches the video's energy and pacing.
-    // description + tags guide the style without overriding ElevenLabs' own analysis.
-    const response = await this.client.music.videoToMusic({
-      videos: [
-        {
-          path: videoPath,
-          contentType: videoContentType(videoPath),
-          contentLength: metadata.sizeBytes,
-        },
-      ],
-      description: prompt,
-      tags,
-      outputFormat: 'mp3_44100_128',
+    const durationSeconds = Math.min(metadata.durationSeconds ?? 20, 22);
+
+    const audioStream = await this.client.textToSoundEffects.convert({
+      text: prompt,
+      duration_seconds: durationSeconds,
+      prompt_influence: 0.5,
     });
 
-    // Collect the ReadableStream<Uint8Array> into a single Buffer
     const chunks: Buffer[] = [];
-    const reader = response.getReader();
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        chunks.push(Buffer.from(value));
-      }
-    } finally {
-      reader.releaseLock();
+    for await (const chunk of audioStream) {
+      chunks.push(Buffer.from(chunk));
     }
     const buffer = Buffer.concat(chunks);
 
@@ -72,9 +44,6 @@ export class ElevenLabsProvider implements MusicGenerationProvider {
     const outputDir = path.join(process.cwd(), 'public', 'generated');
     fs.mkdirSync(outputDir, { recursive: true });
     fs.writeFileSync(path.join(outputDir, `${id}.mp3`), buffer);
-
-    // Approximate duration from video metadata; ElevenLabs matches video length
-    const durationSeconds = metadata.durationSeconds ?? 20;
 
     return {
       audioUrl: `/generated/${id}.mp3`,
