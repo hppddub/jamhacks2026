@@ -544,9 +544,9 @@ export interface StemSeparationProvider {
 ### LocalDemucsProvider (`lib/providers/stems/LocalDemucsProvider.ts`) — **Recommended free provider**
 - Runs `python -m demucs` as a subprocess using Node's `spawnSync` — no API key, no cost
 - Python executable: `process.env.DEMUCS_PYTHON_CMD ?? 'python'` (override with `DEMUCS_PYTHON_CMD=python3` if needed)
-- Command: `python -m demucs --mp3 --mp3-bitrate 128 -n htdemucs --out {tmpDir} {localPath}`
+- Command: `python -m demucs --mp3 --mp3-bitrate 320 -n htdemucs_ft --out {tmpDir} {localPath}`
 - **Requirements:** `pip install demucs` + `ffmpeg` in PATH
-- Output structure: `.tmp-demucs/{jobId}/htdemucs/{trackName}/{stem}.mp3`
+- Output structure: `.tmp-demucs/{jobId}/htdemucs_ft/{trackName}/{stem}.mp3`
   - Demucs filenames: `drums.mp3`, `bass.mp3`, `other.mp3`, `vocals.mp3`
   - `other` maps to `StemId = 'melody'`
 - Files copied to `public/stems/{jobId}/`, temp dir cleaned up after (also cleaned on error)

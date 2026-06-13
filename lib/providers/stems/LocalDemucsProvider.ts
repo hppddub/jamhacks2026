@@ -54,7 +54,7 @@ export class LocalDemucsProvider implements StemSeparationProvider {
     try {
       const result = spawnSync(
         pythonCmd,
-        ['-m', 'demucs', '--mp3', '--mp3-bitrate', '128', '-n', 'htdemucs', '--out', demucsOutputDir, localPath],
+        ['-m', 'demucs', '--mp3', '--mp3-bitrate', '320', '-n', 'htdemucs_ft', '--out', demucsOutputDir, localPath],
         { timeout: 300_000, env: { ...process.env, PATH: resolvedPath() } }
       );
 
@@ -94,9 +94,9 @@ export class LocalDemucsProvider implements StemSeparationProvider {
       throw err;
     }
 
-    // Demucs writes: {demucsOutputDir}/htdemucs/{trackName}/{stem}.mp3
+    // Demucs writes: {demucsOutputDir}/htdemucs_ft/{trackName}/{stem}.mp3
     const trackName = path.basename(localPath, path.extname(localPath));
-    const demucsTrackDir = path.join(demucsOutputDir, 'htdemucs', trackName);
+    const demucsTrackDir = path.join(demucsOutputDir, 'htdemucs_ft', trackName);
 
     if (!fs.existsSync(demucsTrackDir)) {
       fs.rmSync(demucsOutputDir, { recursive: true, force: true });
