@@ -22,7 +22,7 @@ export class ElevenLabsProvider implements MusicGenerationProvider {
     const { analysis, metadata } = result;
     const prompt = buildPrompt(result);
 
-    const durationSeconds = Math.min(metadata.durationSeconds ?? 20, 22);
+    const durationSeconds = Math.min(metadata.durationSeconds ?? 22, 22);
 
     const audioStream = await this.client.textToSoundEffects.convert({
       text: prompt,

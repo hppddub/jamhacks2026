@@ -39,9 +39,9 @@ const CHORD_PROGRESSION = [
   [1.0, 1.25, 1.5],     // I  return
 ];
 
-export function generateMp3(analysis: VideoAnalysis, outputPath: string): number {
+export function generateMp3(analysis: VideoAnalysis, outputPath: string, targetDuration?: number): number {
   const rootFreq = MOOD_ROOT_FREQ[analysis.mood] ?? 261.63;
-  const durationSeconds = ENERGY_DURATION[analysis.energyLevel] ?? 18;
+  const durationSeconds = targetDuration ?? ENERGY_DURATION[analysis.energyLevel] ?? 18;
   const amplitude = ENERGY_AMPLITUDE[analysis.energyLevel] ?? 0.45;
 
   const totalSamples = SAMPLE_RATE * durationSeconds;

@@ -7,13 +7,17 @@ import { generateId, delay } from '@/lib/utils';
 
 export class MockMusicProvider implements MusicGenerationProvider {
   async generate(result: AnalysisResult): Promise<GeneratedScore> {
-    const { analysis } = result;
+    const { analysis, metadata } = result;
     const prompt = buildPrompt(result);
     const id = generateId();
     const outputPath = path.join(process.cwd(), 'public', 'generated', `${id}.mp3`);
 
+    const targetDuration = metadata.durationSeconds
+      ? Math.min(metadata.durationSeconds, 22)
+      : undefined;
+
     // Synthesise real PCM audio and encode to MP3
-    const durationSeconds = generateMp3(analysis, outputPath);
+    const durationSeconds = generateMp3(analysis, outputPath, targetDuration);
 
     // Simulate generation latency after synthesis
     await delay(3000 + Math.random() * 2000);
