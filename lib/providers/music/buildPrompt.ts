@@ -49,6 +49,7 @@ export function buildPrompt(result: AnalysisResult): string {
     colorPalette, settingType, emotionalArc,
     sonicTexture, musicalRecommendation,
     keyMode, rhythmicFeel, dynamicArc, musicRole,
+    audioDialogueDominant, soundTexture, volumeDynamics,
   } = analysis;
 
   const genreLabel = genre.charAt(0).toUpperCase() + genre.slice(1);
@@ -67,6 +68,29 @@ export function buildPrompt(result: AnalysisResult): string {
 
   const roleStr = musicRole ? MUSIC_ROLE_DESCRIPTOR[musicRole] ?? '' : '';
 
+  // Audio context — inform ElevenLabs how to coexist with the video's existing audio
+  const audioContextParts: string[] = [];
+  if (audioDialogueDominant) {
+    audioContextParts.push('understated — must not compete with spoken word');
+  }
+  if (soundTexture === 'sharp') {
+    audioContextParts.push('leave space for sharp audio transients');
+  } else if (soundTexture === 'layered') {
+    audioContextParts.push('blend into a dense, layered audio environment');
+  } else if (soundTexture === 'sparse') {
+    audioContextParts.push('minimal texture — sparse audio environment');
+  }
+  if (volumeDynamics === 'building') {
+    audioContextParts.push('mirror the building volume arc');
+  } else if (volumeDynamics === 'erratic') {
+    audioContextParts.push('maintain steady underscoring through erratic audio changes');
+  } else if (volumeDynamics === 'dropping') {
+    audioContextParts.push('gently fade alongside the dropping audio energy');
+  }
+  const audioContextStr = audioContextParts.length > 0
+    ? `Audio context: ${audioContextParts.join(', ')}.`
+    : '';
+
   // Path A: Gemini gave a clean musical recommendation — use it as the centrepiece.
   // extraStr is intentionally excluded here: musicalRecommendation already carries
   // rhythmic and dynamic detail, and including it would consume budget needed for
@@ -80,7 +104,7 @@ export function buildPrompt(result: AnalysisResult): string {
           )
           .join(', ');
 
-    const parts = [core, roleStr, musicalRecommendation, `Arc: ${arc}.`, `Features ${instruments}.`, closing];
+    const parts = [core, roleStr, audioContextStr, musicalRecommendation, `Arc: ${arc}.`, `Features ${instruments}.`, closing];
     return assemble(parts);
   }
 
@@ -100,7 +124,7 @@ export function buildPrompt(result: AnalysisResult): string {
   );
   const shape = `Arc: ${arcClauses.join(', ')}.`;
 
-  const parts = [core, roleStr, sonic, extraStr, shape, `Features ${instruments}.`, closing];
+  const parts = [core, roleStr, audioContextStr, sonic, extraStr, shape, `Features ${instruments}.`, closing];
   return assemble(parts);
 }
 

@@ -14,6 +14,11 @@ import type {
   SettingType,
   AudioEnergyLevel,
   MusicRole,
+  AudioContentType,
+  DialogueTone,
+  DialogueSentiment,
+  SoundTexture,
+  VolumeDynamics,
 } from '@/types';
 import { delay } from '@/lib/utils';
 
@@ -30,6 +35,11 @@ const VALID_VISUAL_PACE: readonly VisualPace[] = ['slow-cuts', 'moderate-cuts', 
 const VALID_SETTINGS: readonly SettingType[] = ['nature', 'urban', 'intimate', 'cinematic', 'abstract', 'sports', 'documentary'];
 const VALID_AUDIO_ENERGY: readonly AudioEnergyLevel[] = ['silent', 'quiet', 'moderate', 'loud'];
 const VALID_MUSIC_ROLES: readonly MusicRole[] = ['background-underscore', 'featured-score', 'sync-to-action', 'ambient-complement'];
+const VALID_AUDIO_CONTENT_TYPES: readonly AudioContentType[] = ['dialogue', 'sound_effects', 'background_music', 'ambient', 'silence'];
+const VALID_DIALOGUE_TONES: readonly DialogueTone[] = ['formal', 'casual', 'emotional', 'tense', 'upbeat'];
+const VALID_DIALOGUE_SENTIMENTS: readonly DialogueSentiment[] = ['positive', 'neutral', 'negative', 'mixed'];
+const VALID_SOUND_TEXTURES: readonly SoundTexture[] = ['sharp', 'blunt', 'soft', 'layered', 'sparse'];
+const VALID_VOLUME_DYNAMICS: readonly VolumeDynamics[] = ['consistent', 'building', 'dropping', 'erratic', 'dynamic'];
 
 function toMood(v: unknown): Mood {
   return VALID_MOODS.includes(v as Mood) ? (v as Mood) : 'emotional';
@@ -60,6 +70,22 @@ function toAudioEnergyLevel(v: unknown): AudioEnergyLevel | undefined {
 }
 function toMusicRole(v: unknown): MusicRole | undefined {
   return VALID_MUSIC_ROLES.includes(v as MusicRole) ? (v as MusicRole) : undefined;
+}
+function toAudioContentTypes(v: unknown): AudioContentType[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((x): x is AudioContentType => VALID_AUDIO_CONTENT_TYPES.includes(x as AudioContentType));
+}
+function toDialogueTone(v: unknown): DialogueTone | undefined {
+  return VALID_DIALOGUE_TONES.includes(v as DialogueTone) ? (v as DialogueTone) : undefined;
+}
+function toDialogueSentiment(v: unknown): DialogueSentiment | undefined {
+  return VALID_DIALOGUE_SENTIMENTS.includes(v as DialogueSentiment) ? (v as DialogueSentiment) : undefined;
+}
+function toSoundTexture(v: unknown): SoundTexture | undefined {
+  return VALID_SOUND_TEXTURES.includes(v as SoundTexture) ? (v as SoundTexture) : undefined;
+}
+function toVolumeDynamics(v: unknown): VolumeDynamics | undefined {
+  return VALID_VOLUME_DYNAMICS.includes(v as VolumeDynamics) ? (v as VolumeDynamics) : undefined;
 }
 function toNumber(v: unknown, fallback: number): number {
   const n = Number(v);
@@ -106,13 +132,20 @@ const ANALYSIS_PROMPT = `Analyze this video carefully and return ONLY a raw JSON
   "existingAudio": "<LISTEN to the audio track. Describe in 8-15 words what sounds are audible — e.g. 'crowd chatter and ambient noise', 'dialogue and occasional laughter', 'explosions and action sound effects', 'background music and nature sounds', or 'no audible sound'>",
   "audioEnergyLevel": "<silent | quiet | moderate | loud — overall prominence of existing audio in the video>",
   "musicRole": "<background-underscore | featured-score | sync-to-action | ambient-complement — how the composed score should relate to the existing audio: background-underscore if audio is loud/prominent (score sits quietly underneath), featured-score if audio is silent/quiet (score takes centre stage), sync-to-action if there are sound effects to hit (score syncs to beats), ambient-complement if there is ambient or natural sound (score enhances without competing)>",
+  "audioContentTypes": ["<dialogue | sound_effects | background_music | ambient | silence>"] (array — include every type present; may have multiple),
+  "dialogueTone": "<formal | casual | emotional | tense | upbeat> — ONLY include when dialogue is present, otherwise omit this field",
+  "dialogueSentiment": "<positive | neutral | negative | mixed> — ONLY include when dialogue is present, otherwise omit this field",
+  "soundTexture": "<sharp | blunt | soft | layered | sparse — overall texture of non-music audio events: sharp = sudden loud transients like gunshots/impacts, blunt = heavy dull thuds, soft = gentle subtle sounds, layered = multiple simultaneous audio layers, sparse = few isolated sounds with silence between>",
+  "volumeDynamics": "<consistent | building | dropping | erratic | dynamic — how the overall audio volume changes across the video: consistent = stays level, building = gradually gets louder, dropping = gradually gets quieter, erratic = unpredictable spikes and drops, dynamic = intentional dramatic swells and pulls>",
+  "audioSummary": "<1 sentence summarising the audio landscape — what sounds are present, their texture, and how volume behaves across the video>",
   "timeline": [
     {
       "startSeconds": <number>,
       "endSeconds": <number>,
       "mood": "<one of the mood values above>",
       "energyLevel": "<low | medium | high>",
-      "label": "<short descriptive label for this segment>"
+      "label": "<short descriptive label for this segment>",
+      "audioNote": "<optional 5-10 words describing the dominant audio event in this segment — e.g. 'sharp impacts and crowd noise', 'quiet dialogue', 'silence', 'swelling background music'>"
     }
   ]
 }
@@ -132,7 +165,13 @@ Rules:
 - dynamicArc: use standard dynamic markings (pp, p, mp, mf, f, ff, fff) to map the intensity journey from start to end
 - existingAudio: LISTEN carefully to the audio track. Do not guess from visuals. Describe only what you actually hear. If there is no discernible audio, write "no audible sound"
 - audioEnergyLevel: rate how prominent or loud the existing audio is — silent (inaudible/none), quiet (subtle background), moderate (clearly present), loud (dominant/foreground)
-- musicRole: decide how a composed score should coexist with the existing audio — use the definitions above`;
+- musicRole: decide how a composed score should coexist with the existing audio — use the definitions above
+- audioContentTypes: identify ALL audio content types present — dialogue (spoken words), sound_effects (non-music events like impacts, doors, nature sounds), background_music (pre-existing music in the video), ambient (environmental noise like wind, room tone, crowd), silence (portions with no audio); include every type that appears
+- dialogueTone and dialogueSentiment: ONLY populate these when dialogue is actually audible. dialogueTone describes the manner of speaking; dialogueSentiment describes the emotional valence of what is being said
+- soundTexture: evaluate the character of transient audio events (sound effects, impacts, voices) — sharp = sudden high-frequency transients, blunt = heavy low-frequency impacts, soft = gentle understated sounds, layered = many audio sources simultaneously, sparse = isolated sounds with notable silence between them
+- volumeDynamics: evaluate how the overall audio level moves across the full video timeline
+- audioSummary: synthesise all audio observations into a single clear sentence a music composer could use
+- audioNote per segment: listen to each time segment individually and describe only what you hear in that window`;
 
 export class GeminiAnalyzer implements VideoAnalysisProvider {
   private ai: GoogleGenAI;
@@ -264,6 +303,17 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
         : undefined,
       audioEnergyLevel: toAudioEnergyLevel(parsed.audioEnergyLevel),
       musicRole: toMusicRole(parsed.musicRole),
+      audioContentTypes: toAudioContentTypes(parsed.audioContentTypes),
+      dialogueTone: toDialogueTone(parsed.dialogueTone),
+      dialogueSentiment: toDialogueSentiment(parsed.dialogueSentiment),
+      soundTexture: toSoundTexture(parsed.soundTexture),
+      volumeDynamics: toVolumeDynamics(parsed.volumeDynamics),
+      audioSummary: typeof parsed.audioSummary === 'string' && parsed.audioSummary
+        ? parsed.audioSummary
+        : undefined,
+      audioDialogueDominant: Array.isArray(parsed.audioContentTypes) &&
+        (parsed.audioContentTypes as unknown[]).includes('dialogue') &&
+        toAudioEnergyLevel(parsed.audioEnergyLevel) !== 'silent',
     };
   }
 
@@ -286,6 +336,7 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
         mood,
         energyLevel,
         label,
+        audioNote: typeof seg.audioNote === 'string' && seg.audioNote ? seg.audioNote : undefined,
       };
     });
 

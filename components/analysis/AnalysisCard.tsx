@@ -23,6 +23,14 @@ const ENERGY_BADGE: Record<string, string> = {
   high:   'bg-[#B28B52]/10 text-[#B28B52] border-[#B28B52]/20 dark:bg-[#fdf3ab]/10 dark:text-[#fdf3ab] dark:border-[#fdf3ab]/20',
 };
 
+const AUDIO_TYPE_BADGE: Record<string, string> = {
+  dialogue:         'bg-teal-500/10 text-teal-400 border-teal-500/20',
+  sound_effects:    'bg-orange-500/10 text-orange-400 border-orange-500/20',
+  background_music: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
+  ambient:          'bg-green-500/10 text-green-400 border-green-500/20',
+  silence:          'bg-navy-800/50 text-cream-300 border-navy-700',
+};
+
 function Badge({ label, className }: { label: string; className?: string }) {
   return (
     <span
@@ -119,6 +127,55 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
       <p className="border-t border-navy-800 pt-4 text-sm italic leading-relaxed text-cream-200">
         {analysis.analysisSummary}
       </p>
+
+      {/* Audio Profile */}
+      {(analysis.audioContentTypes?.length || analysis.soundTexture || analysis.volumeDynamics || analysis.audioSummary) && (
+        <div className="border-t border-navy-800 pt-4">
+          <p className="mb-2 text-xs font-medium uppercase tracking-wider text-cream-300">
+            Audio Profile
+          </p>
+          {analysis.audioContentTypes && analysis.audioContentTypes.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {analysis.audioContentTypes.map((type) => (
+                <Badge
+                  key={type}
+                  label={type.replace('_', ' ')}
+                  className={AUDIO_TYPE_BADGE[type] ?? 'border-navy-700 bg-navy-800 text-cream-100'}
+                />
+              ))}
+            </div>
+          )}
+          <div className="mb-2 flex flex-wrap gap-1.5">
+            {analysis.soundTexture && (
+              <Badge
+                label={`${analysis.soundTexture} texture`}
+                className="border-orange-500/20 bg-orange-500/10 text-orange-400"
+              />
+            )}
+            {analysis.volumeDynamics && (
+              <Badge
+                label={`${analysis.volumeDynamics} volume`}
+                className="border-purple-500/20 bg-purple-500/10 text-purple-400"
+              />
+            )}
+            {analysis.dialogueTone && (
+              <Badge
+                label={`${analysis.dialogueTone} tone`}
+                className="border-teal-500/20 bg-teal-500/10 text-teal-400"
+              />
+            )}
+            {analysis.dialogueSentiment && (
+              <Badge
+                label={`${analysis.dialogueSentiment} sentiment`}
+                className="border-sky-500/20 bg-sky-500/10 text-sky-400"
+              />
+            )}
+          </div>
+          {analysis.audioSummary && (
+            <p className="text-sm italic leading-relaxed text-cream-200">{analysis.audioSummary}</p>
+          )}
+        </div>
+      )}
 
       {/* Timeline arc */}
       <div className="border-t border-navy-800 pt-4">

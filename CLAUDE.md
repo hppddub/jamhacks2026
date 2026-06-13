@@ -7,7 +7,7 @@ This file is the persistent technical memory for Claude Code working on this pro
 ## Project Identity
 
 **Name:** BananaMOV
-**Purpose:** AI-powered video scoring platform — upload a video, analyze its visual arc across the timeline, generate a matching music score via ElevenLabs.
+**Purpose:** AI-powered video scoring platform — upload a video, analyze its visual and audio arc across the timeline, generate a matching music score via ElevenLabs.
 **Context:** Built for JamHacks 2026. ElevenLabs is a track prize sponsor — ElevenLabs Sound Generation is the required production music API.
 **Status:** MVP complete. All phases implemented and building. Full workflow runs with mock providers by default; Gemini analysis and ElevenLabs music enabled via env vars.
 
@@ -263,9 +263,19 @@ Extension derived from `metadata.filename`, defaults to `'video/mp4'` if unknown
 ### Analysis prompt
 The static `ANALYSIS_PROMPT` constant defines a detailed JSON schema requiring:
 - `videoDurationSeconds`, `mood`, `energyLevel`, `pace`, `bpm`, `genre`, `sceneCount`, `motionScore`, `instrumentSuggestions`, `analysisSummary`
-- `timeline`: array of 3–5 segments, each with `startSeconds`, `endSeconds`, `mood`, `energyLevel`, `label`
+- Visual fields: `colorPalette`, `cameraStyle`, `visualPace`, `settingType`, `emotionalArc`, `sonicTexture`, `musicalRecommendation`, `keyMode`, `rhythmicFeel`, `dynamicArc`
+- Audio fields: `existingAudio`, `audioEnergyLevel`, `musicRole`, `audioContentTypes`, `dialogueTone` (dialogue only), `dialogueSentiment` (dialogue only), `soundTexture`, `volumeDynamics`, `audioSummary`
+- `timeline`: array of 3–5 segments, each with `startSeconds`, `endSeconds`, `mood`, `energyLevel`, `label`, `audioNote`
 - BPM guidance: low energy → 60-90, medium → 90-120, high → 120-160
 - Model: `gemini-2.5-flash`
+
+**Audio analysis rules in the prompt:**
+- `audioContentTypes`: identify ALL types present — `dialogue`, `sound_effects`, `background_music`, `ambient`, `silence`
+- `dialogueTone` / `dialogueSentiment`: only populated when dialogue is audible; omitted otherwise
+- `soundTexture`: character of transient audio events — `sharp` (sudden high-freq transients), `blunt` (heavy low-freq), `soft` (gentle), `layered` (many simultaneous sources), `sparse` (isolated with silence)
+- `volumeDynamics`: how overall audio level moves — `consistent`, `building`, `dropping`, `erratic`, `dynamic`
+- `audioSummary`: 1-sentence synthesis of all audio observations
+- `audioNote` per segment: 5–10 words on dominant audio event in that time window
 
 ### Retry logic (`generateWithRetry`)
 - Up to 4 attempts
@@ -276,10 +286,13 @@ The static `ANALYSIS_PROMPT` constant defines a detailed JSON schema requiring:
 ### Response parsing
 - `extractJson(raw)`: strips markdown code fences (` ```json ... ``` ` or ` ``` ... ``` `) before `JSON.parse`
 - Guard functions with safe fallbacks: `toMood` (fallback: `'emotional'`), `toEnergy` (fallback: `'medium'`), `toPace` (fallback: `'moderate'`), `toGenre` (fallback: `'cinematic'`), `toNumber` (fallback: provided), `toStringArray` (fallback: `[]`)
+- Audio guard functions (return `undefined` on invalid): `toAudioEnergyLevel`, `toMusicRole`, `toAudioContentTypes` (returns `[]` on invalid), `toDialogueTone`, `toDialogueSentiment`, `toSoundTexture`, `toVolumeDynamics`
+- `audioDialogueDominant` is derived: `true` when `audioContentTypes` includes `'dialogue'` AND `audioEnergyLevel !== 'silent'`
 - `videoDurationSeconds` from parsed JSON is stored back into `metadata.durationSeconds`
 - BPM clamped: `Math.round(Math.min(160, Math.max(60, toNumber(parsed.bpm, 100))))`
 - MotionScore clamped: `Math.round(Math.min(1, Math.max(0, toNumber(parsed.motionScore, 0.5))) * 100) / 100`
 - Timeline sorted by `startSeconds`, then `segments[0].startSeconds = 0` and `segments[last].endSeconds = totalDuration` forced
+- Each timeline segment now includes optional `audioNote` parsed from the response
 
 ### Timeline fallback
 If `raw.timeline` is not an array or has fewer than 2 entries, `fallbackTimeline(duration)` returns 3 equal-width segments: `calm/low` → `emotional/medium` → `inspirational/high`.
@@ -340,36 +353,65 @@ Two exported functions. Both `MockMusicProvider` and `ElevenLabsProvider` import
 
 ### `buildPrompt(result: AnalysisResult): string`
 
-Pure function. Constructs a natural language description of the desired music:
+Pure function. Constructs a natural language description of the desired music. Max 450 characters assembled via `assemble()` which skips parts that would exceed the budget rather than truncating.
 
-```ts
-// Structure:
-// "{Genre} music score, approximately {bpm} BPM, {arcClauses}. Features {instruments}. {moodClosing}"
+**Two paths:**
+- **Path A** (preferred): when Gemini returns a clean `musicalRecommendation` with no visual leakage, it is used as the centrepiece
+- **Path B** (fallback): translates visual properties (`sonicTexture`, `settingType`, `colorPalette`) into sonic descriptors
 
-const arcClauses = timeline.map((seg, i) => {
-  if (i === 0) return `beginning with a ${seg.energyLevel}-energy, ${seg.mood} feel`;
-  if (i === timeline.length - 1) return `ending with a ${seg.energyLevel}-energy, ${seg.mood} resolution`;
-  return `building through a ${seg.energyLevel}-energy, ${seg.mood} section`;
-});
-```
+**Audio context modifier** — derived from new audio fields and inserted after `roleStr` in both paths:
+- `audioDialogueDominant === true` → adds `"understated — must not compete with spoken word"`
+- `soundTexture === 'sharp'` → adds `"leave space for sharp audio transients"`
+- `soundTexture === 'layered'` → adds `"blend into a dense, layered audio environment"`
+- `soundTexture === 'sparse'` → adds `"minimal texture — sparse audio environment"`
+- `volumeDynamics === 'building'` → adds `"mirror the building volume arc"`
+- `volumeDynamics === 'erratic'` → adds `"maintain steady underscoring through erratic audio changes"`
+- `volumeDynamics === 'dropping'` → adds `"gently fade alongside the dropping audio energy"`
 
-`MOOD_CLOSINGS` map (mood → closing sentence):
-| Mood | Closing |
-|---|---|
-| `dramatic` | "Cinematic, powerful, and emotionally impactful." |
-| `calm` | "Peaceful, reflective, and serene." |
-| `energetic` | "Dynamic, driving, and high-energy." |
-| `emotional` | "Heartfelt, tender, and deeply moving." |
-| `inspirational` | "Uplifting, hopeful, and motivating." |
-| `suspenseful` | "Tense, mysterious, and full of anticipation." |
-| `corporate` | "Professional, polished, and confident." |
-| `happy` | "Bright, playful, and optimistic." |
-
-Result is sliced to 1000 characters.
+`MUSIC_ROLE_DESCRIPTOR` map drives the `roleStr` (inserted before audio context):
+- `background-underscore` → "Composed as a subtle background underscore — restrained, supportive."
+- `featured-score` → "Composed as a featured score — full presence, emotionally centred."
+- `sync-to-action` → "Composed to sync with action beats — rhythmically tight, punchy hits."
+- `ambient-complement` → "Composed as ambient complement — airy, unobtrusive, blends with natural sound."
 
 ### `buildTags(result: AnalysisResult): string[]`
 
 Returns up to 10 tags: `[mood, genre, "{energy} energy", "{pace} pace", ...instrumentSuggestions.slice(0, 3)]`. Intended for ElevenLabs tag fields (API allows max 10).
+
+---
+
+## Audio Analysis Type System
+
+New types added to `types/index.ts` as part of the audio characterization feature:
+
+```ts
+export type AudioContentType = 'dialogue' | 'sound_effects' | 'background_music' | 'ambient' | 'silence';
+export type DialogueTone     = 'formal' | 'casual' | 'emotional' | 'tense' | 'upbeat';
+export type DialogueSentiment = 'positive' | 'neutral' | 'negative' | 'mixed';
+export type SoundTexture     = 'sharp' | 'blunt' | 'soft' | 'layered' | 'sparse';
+export type VolumeDynamics   = 'consistent' | 'building' | 'dropping' | 'erratic' | 'dynamic';
+```
+
+`TimelineSegment` extended with:
+```ts
+audioNote?: string;   // 5-10 word descriptor of dominant audio activity in this segment
+```
+
+`VideoAnalysis` extended with:
+```ts
+audioContentTypes?:    AudioContentType[];  // all audio types present in the video
+dialogueTone?:         DialogueTone;        // only set when dialogue is audible
+dialogueSentiment?:    DialogueSentiment;   // only set when dialogue is audible
+soundTexture?:         SoundTexture;        // character of transient/non-music audio events
+volumeDynamics?:       VolumeDynamics;      // how overall audio volume moves across the video
+audioSummary?:         string;              // 1-sentence synthesis of all audio observations
+audioDialogueDominant?: boolean;           // true when dialogue is present and audio is not silent
+```
+
+**Semantic rules:**
+- `dialogueTone` and `dialogueSentiment` are always `undefined` when `audioContentTypes` does not include `'dialogue'`
+- `audioDialogueDominant` is derived (not directly set by Gemini): `audioContentTypes.includes('dialogue') && audioEnergyLevel !== 'silent'`
+- These fields are all optional — components and `buildPrompt` must guard against `undefined`
 
 ---
 
@@ -418,6 +460,16 @@ Energy indices: 0=low, 1=medium, 2=high.
 ```
 "This {pace} {peak.mood} video has {peak.energyLevel} peak energy with approximately {sceneCount} scene cuts, suggesting a {genre} score around {bpm} BPM featuring {instr[0]} and {instr[1]}."
 ```
+
+**Audio fields (all seeded):**
+- `audioContentTypes`: picked from 10 preset combinations (e.g. `['dialogue', 'background_music']`, `['sound_effects', 'ambient']`, `['silence']`)
+- `dialogueTone` / `dialogueSentiment`: only set when `dialogue` is in `audioContentTypes` AND `audioEnergyLevel !== 'silent'`; picked from pools of 5 and 4 values respectively
+- `soundTexture`: picked from `['sharp', 'blunt', 'soft', 'layered', 'sparse']`
+- `volumeDynamics`: picked from `['consistent', 'building', 'dropping', 'erratic', 'dynamic']`
+- `audioDialogueDominant`: `true` only when dialogue is the sole content type and energy is not silent
+- `audioSummary`: constructed from the above — tone of dialogue if present, otherwise texture/dynamics description
+- `musicRole`: derived from `audioEnergyLevel` (loud→`background-underscore`, silent→`featured-score`, moderate→random of sync-to-action/ambient-complement, quiet→`ambient-complement`)
+- Each `TimelineSegment` now includes `audioNote`: picked from a pool of 10 descriptive strings
 
 **Delay:** `delay(2000 + Math.random() * 1000)` (2–3 seconds; uses `Math.random()`, not seeded)
 
@@ -561,7 +613,14 @@ export async function POST(request: Request) {
 - 2-column stats grid: "Est. Scene Cuts" + "Motion Score" (amber progress bar, 0–100%)
 - Instrument suggestions as zinc-800 bordered tags (not shadcn `Badge`)
 - `analysisSummary` italic text below a `border-t`
-- `<TimelineBar>` below a second `border-t`
+- **Audio Profile section** (conditionally rendered when any audio field is present), below `analysisSummary`:
+  - `audioContentTypes` as colored badges (`AUDIO_TYPE_BADGE` map): dialogue=teal, sound_effects=orange, background_music=purple, ambient=green, silence=muted
+  - `soundTexture` badge: orange-tinted
+  - `volumeDynamics` badge: purple-tinted
+  - `dialogueTone` badge: teal-tinted (only when dialogue is present)
+  - `dialogueSentiment` badge: sky-tinted (only when dialogue is present)
+  - `audioSummary` italic text
+- `<TimelineBar>` below a final `border-t`
 
 ### TimelineBar
 - Accepts `{ segments: TimelineSegment[] }`

@@ -32,6 +32,7 @@ export interface TimelineSegment {
   mood: Mood;
   energyLevel: EnergyLevel;
   label: string;
+  audioNote?: string;
 }
 
 export type ColorPalette = 'warm' | 'cool' | 'dark' | 'bright' | 'neutral';
@@ -40,6 +41,12 @@ export type VisualPace = 'slow-cuts' | 'moderate-cuts' | 'fast-cuts';
 export type SettingType = 'nature' | 'urban' | 'intimate' | 'cinematic' | 'abstract' | 'sports' | 'documentary';
 export type AudioEnergyLevel = 'silent' | 'quiet' | 'moderate' | 'loud';
 export type MusicRole = 'background-underscore' | 'featured-score' | 'sync-to-action' | 'ambient-complement';
+
+export type AudioContentType = 'dialogue' | 'sound_effects' | 'background_music' | 'ambient' | 'silence';
+export type DialogueTone = 'formal' | 'casual' | 'emotional' | 'tense' | 'upbeat';
+export type DialogueSentiment = 'positive' | 'neutral' | 'negative' | 'mixed';
+export type SoundTexture = 'sharp' | 'blunt' | 'soft' | 'layered' | 'sparse';
+export type VolumeDynamics = 'consistent' | 'building' | 'dropping' | 'erratic' | 'dynamic';
 
 export interface VideoAnalysis {
   mood: Mood;
@@ -65,6 +72,13 @@ export interface VideoAnalysis {
   existingAudio?: string;
   audioEnergyLevel?: AudioEnergyLevel;
   musicRole?: MusicRole;
+  audioContentTypes?: AudioContentType[];
+  dialogueTone?: DialogueTone;
+  dialogueSentiment?: DialogueSentiment;
+  soundTexture?: SoundTexture;
+  volumeDynamics?: VolumeDynamics;
+  audioSummary?: string;
+  audioDialogueDominant?: boolean;
 }
 
 export interface AnalysisResult {
