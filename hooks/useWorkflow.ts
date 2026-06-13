@@ -1,0 +1,139 @@
+'use client';
+
+import { useState, useCallback } from 'react';
+import { useMutation } from '@tanstack/react-query';
+import type { WorkflowState, VideoMetadata, AnalysisResult, GeneratedScore } from '@/types';
+
+const defaultState: WorkflowState = {
+  step: 'idle',
+  videoFile: null,
+  videoObjectUrl: null,
+  uploadedVideoPath: null,
+  uploadedMetadata: null,
+  analysis: null,
+  score: null,
+  error: null,
+};
+
+async function apiFetch<T>(url: string, init: RequestInit): Promise<T> {
+  const res = await fetch(url, init);
+  const data = (await res.json()) as { error?: string } & T;
+  if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Request failed');
+  return data;
+}
+
+export function useWorkflow() {
+  const [state, setState] = useState<WorkflowState>(defaultState);
+
+  // ── Upload ───────────────────────────────────────────────────────────────────
+  const uploadMutation = useMutation({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append('video', file);
+      return apiFetch<{ videoPath: string; filename: string; sizeBytes: number }>(
+        '/api/upload',
+        { method: 'POST', body: form }
+      );
+    },
+    onSuccess: (data) => {
+      setState((prev) => ({
+        ...prev,
+        step: 'uploaded',
+        uploadedVideoPath: data.videoPath,
+        uploadedMetadata: { filename: data.filename, sizeBytes: data.sizeBytes },
+        error: null,
+      }));
+    },
+    onError: (err: Error) => {
+      setState((prev) => ({ ...prev, step: 'idle', error: err.message }));
+    },
+  });
+
+  // ── Analyze ──────────────────────────────────────────────────────────────────
+  const analyzeMutation = useMutation({
+    mutationFn: async (payload: { videoPath: string } & VideoMetadata) => {
+      return apiFetch<AnalysisResult>('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    },
+    onSuccess: (data) => {
+      setState((prev) => ({ ...prev, step: 'analyzed', analysis: data, error: null }));
+    },
+    onError: (err: Error) => {
+      setState((prev) => ({ ...prev, step: 'uploaded', error: err.message }));
+    },
+  });
+
+  // ── Generate ─────────────────────────────────────────────────────────────────
+  const generateMutation = useMutation({
+    mutationFn: async (analysis: AnalysisResult) => {
+      return apiFetch<GeneratedScore>('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(analysis),
+      });
+    },
+    onSuccess: (data) => {
+      setState((prev) => ({ ...prev, step: 'completed', score: data, error: null }));
+    },
+    onError: (err: Error) => {
+      setState((prev) => ({ ...prev, step: 'analyzed', error: err.message }));
+    },
+  });
+
+  // ── Handlers ──────────────────────────────────────────────────────────────────
+
+  /** Store file in state (preview); does NOT start upload. */
+  const selectFile = useCallback((file: File) => {
+    const objectUrl = URL.createObjectURL(file);
+    setState((prev) => ({
+      ...prev,
+      step: 'idle',
+      videoFile: file,
+      videoObjectUrl: objectUrl,
+      error: null,
+    }));
+  }, []);
+
+  /** Clear the selected file and return to empty idle state. */
+  const removeFile = useCallback(() => {
+    setState((prev) => {
+      if (prev.videoObjectUrl) URL.revokeObjectURL(prev.videoObjectUrl);
+      return { ...defaultState };
+    });
+  }, []);
+
+  /** Begin upload of the currently selected file. */
+  const upload = useCallback(() => {
+    setState((prev) => {
+      if (!prev.videoFile) return prev;
+      uploadMutation.mutate(prev.videoFile);
+      return { ...prev, step: 'uploading', error: null };
+    });
+  }, [uploadMutation]);
+
+  const analyze = useCallback(() => {
+    if (!state.uploadedVideoPath || !state.uploadedMetadata) return;
+    setState((prev) => ({ ...prev, step: 'analyzing', error: null }));
+    analyzeMutation.mutate({
+      videoPath: state.uploadedVideoPath!,
+      filename: state.uploadedMetadata!.filename,
+      sizeBytes: state.uploadedMetadata!.sizeBytes,
+    });
+  }, [state.uploadedVideoPath, state.uploadedMetadata, analyzeMutation]);
+
+  const generate = useCallback(() => {
+    if (!state.analysis) return;
+    setState((prev) => ({ ...prev, step: 'generating', error: null }));
+    generateMutation.mutate(state.analysis!);
+  }, [state.analysis, generateMutation]);
+
+  const reset = useCallback(() => {
+    if (state.videoObjectUrl) URL.revokeObjectURL(state.videoObjectUrl);
+    setState(defaultState);
+  }, [state.videoObjectUrl]);
+
+  return { state, selectFile, removeFile, upload, analyze, generate, reset };
+}
