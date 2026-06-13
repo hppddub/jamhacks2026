@@ -54,7 +54,7 @@ On error at any step: an error banner appears with a "Retry" button (for analyze
 | Components | shadcn/ui (`button`, `badge`, `card`) + hand-written `ThemeToggle` |
 | Data fetching | TanStack Query v5 (`useMutation` only) |
 | Video analysis | **Always Google Gemini 2.5 Flash** (factory hardcoded; `MockAnalyzer` exists but unused) |
-| Music generation | Mock PCM synthesis (default) or ElevenLabs Sound Generation API (raw REST, no SDK) |
+| Music generation | Mock PCM synthesis (default), ElevenLabs Sound Generation (`/v1/sound-generation`), or **ElevenLabs Music** (`/v1/music`, composition plan) — all raw REST, no SDK |
 | File storage | Local filesystem (`public/uploads`, `public/generated`) |
 | Database | None |
 | Auth | None |
@@ -94,9 +94,11 @@ On error at any step: an error banner appears with a "Retry" button (for analyze
 │   │   │   ├── MockAnalyzer.ts        # Seeded-random timeline + analysis
 │   │   │   └── GeminiAnalyzer.ts      # Real video analysis via Google Gemini 2.5 Flash
 │   │   └── music/
-│   │       ├── buildPrompt.ts         # Shared prompt + tags generation (used by both providers)
-│   │       ├── MockMusicProvider.ts   # Generates real MP3 via lamejs PCM synthesis
-│   │       └── ElevenLabsProvider.ts  # Calls ElevenLabs Sound Generation API
+│   │       ├── buildPrompt.ts            # Sound-effects prompt + tags generation
+│   │       ├── buildCompositionPlan.ts   # Timeline → Eleven Music composition plan + styles
+│   │       ├── MockMusicProvider.ts      # Generates real MP3 via lamejs PCM synthesis
+│   │       ├── ElevenLabsProvider.ts     # ElevenLabs Sound Generation API (/v1/sound-generation)
+│   │       └── ElevenMusicProvider.ts    # ElevenLabs Music API (/v1/music, composition plan)
 │   ├── audio/
 │   │   └── generateTone.ts            # PCM synthesis + lamejs MP3 encoding (mock only)
 │   └── utils.ts                       # cn, formatDuration, formatFileSize, seededRandom,
@@ -132,7 +134,7 @@ Provider selection in `lib/providers/factory.ts`:
 | Function | Selection logic | Provider |
 |---|---|---|
 | `getAnalysisProvider()` | **Hardcoded** — `ANALYSIS_PROVIDER` is ignored | Always `GeminiAnalyzer` |
-| `getMusicProvider()` | `MUSIC_PROVIDER` (default `mock`) | `MockMusicProvider`, or `ElevenLabsProvider` when `=elevenlabs` |
+| `getMusicProvider()` | `MUSIC_PROVIDER` (default `mock`) | `MockMusicProvider`; `ElevenMusicProvider` when `=elevenmusic`; `ElevenLabsProvider` when `=elevenlabs` |
 
 > `MockAnalyzer` is no longer imported by the factory. To restore mock analysis, re-add the env-driven branch in `getAnalysisProvider()`.
 
@@ -650,7 +652,7 @@ GEMINI_API_KEY=
 ```
 
 - **`ANALYSIS_PROVIDER` is no longer read** — the analysis factory is hardcoded to Gemini, so `GEMINI_API_KEY` is effectively required to run the analyze step.
-- Only `MUSIC_PROVIDER` still branches (default `'mock'`). `ELEVENLABS_API_KEY` is required when `MUSIC_PROVIDER=elevenlabs`.
+- Only `MUSIC_PROVIDER` still branches (default `'mock'`; options `mock` | `elevenlabs` | `elevenmusic`). `ELEVENLABS_API_KEY` is required when `MUSIC_PROVIDER=elevenlabs` **or** `elevenmusic`; the latter also requires the key to have **Music Generation = Access** enabled.
 
 ---
 
@@ -664,6 +666,30 @@ GEMINI_API_KEY=
 - Gemini processing failure (state != ACTIVE): error message surfaced from provider
 - ElevenLabs empty response: error message surfaced from provider
 - Missing API keys: constructors throw on instantiation (caught by API route, surfaced as 500)
+
+---
+
+## Eleven Music Integration — IMPLEMENTED (Phases 1–2)
+
+> **STATUS: shipped as `ElevenMusicProvider` (opt-in via `MUSIC_PROVIDER=elevenmusic`; mock stays default).** Composition-plan mode is live; Phase 3 (Gemini authoring per-section styles) remains future. **Runtime prerequisite:** the API key must have **Music Generation = Access** enabled. Implemented with `MAX_TOTAL_SECONDS = 180`, heuristic styles from existing Gemini fields (no analyze-step changes), always instrumental.
+
+### Motivation
+The original `ElevenLabsProvider` calls the ElevenLabs **sound-effects** endpoint (`/v1/sound-generation`): a single holistic clip with `duration_seconds` as the only temporal control, no sections/timing, and a 30 s cap that forces repetitive multi-segment stitching. To make scores **align with the video's structure** (Idea 1) and carry **richer musical direction** (Idea 3), `ElevenMusicProvider` uses the ElevenLabs **Music** API (`POST /v1/music`, `model_id: music_v1`), which supports up to 600 s in one call and a structured `composition_plan`. The sound-effects provider and mock remain for A/B and fallback.
+
+### The Music API (verified)
+- Two mutually exclusive modes:
+  - **`prompt`** (string) + `music_length_ms` (3,000–600,000) + `force_instrumental` (prompt-mode only).
+  - **`composition_plan`** (`MusicPrompt` for `music_v1`): `positive_global_styles[]`, `negative_global_styles[]`, and `sections[]` where each `SongSection` has `section_name`, `positive_local_styles[]`, `negative_local_styles[]`, `duration_ms` (3,000–120,000), and `lines[]` (lyrics; empty ⇒ instrumental). `respect_sections_durations` enforces section lengths.
+- **Prerequisites/limits:** the API key needs **Music Generation = Access**; music costs ~600–700 credits/min (Creator plan = 100k credits/mo); paid-plan outputs carry commercial rights (no real artist names / copyrighted lyrics).
+
+### Idea 1 — structural alignment
+`buildCompositionPlan(result)` maps the Gemini `timeline` (3–5 arc segments) onto `composition_plan.sections`, one section per segment, so the score's section changes track the video's arc. Each section clamped to [3 s, 120 s] (short segments merged into a neighbour, long ones split into equal sub-sections), total capped at `MAX_TOTAL_SECONDS = 180` (3 min) and scaled to the real video length, with `respect_sections_durations: true`. This is sectional alignment, not frame-accurate scene-cut sync (the 3 s minimum precludes 2 s/3 s cuts — and that's musically correct).
+
+### Idea 3 — richer direction
+Per-section `positive_local_styles` and global `positive/negative_global_styles` sourced from Gemini's existing musical fields (`musicalRecommendation`, `sonicTexture`, `instrumentSuggestions`, `keyMode`, `rhythmicFeel`, `dynamicArc`, `genre`, `bpm`), filtered sound-only via the `VISUAL_LEAK` regex; instrumental enforced by empty `lines` + negative `vocals`. **Deepest variant (optional):** extend the Gemini schema so the model emits per-segment style keyword arrays directly.
+
+### Rollout (additive, behind the factory)
+`ElevenMusicProvider` implements the unchanged `MusicGenerationProvider` interface, selected by `MUSIC_PROVIDER=elevenmusic`; the sound-effects provider and mock remain for A/B and fallback. New files: `lib/providers/music/ElevenMusicProvider.ts`, `lib/providers/music/buildCompositionPlan.ts`. **Phase 2 (composition-plan mapping) is implemented; Phase 3 (Gemini-emitted per-section styles) is future.** The response is raw MP3 bytes, written to `public/generated/{uuid}.mp3`; the returned `GeneratedScore` includes an optional `sections[]` summary and a human-readable plan serialization in `prompt`. See CLAUDE.md → "Eleven Music Integration (Ideas 1 & 3)" for the full engineering detail.
 
 ---
 
