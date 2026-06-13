@@ -2,7 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import type { MusicGenerationProvider } from '../types';
 import type { AnalysisResult, GeneratedScore } from '@/types';
-import { buildPrompt } from './buildPrompt';
+import { buildPrompt, buildBackendPrompt } from './buildPrompt';
 import { generateId } from '@/lib/utils';
 
 const ELEVENLABS_API = 'https://api.elevenlabs.io/v1/sound-generation';
@@ -24,16 +24,19 @@ export class ElevenLabsProvider implements MusicGenerationProvider {
   async generate(result: AnalysisResult): Promise<GeneratedScore> {
     const { analysis, metadata } = result;
     const prompt = buildPrompt(result);
+    const { backendPrompt, instrumentSpec } = buildBackendPrompt(result);
 
-    console.log('[ElevenLabs] prompt (%d chars):', prompt.length, prompt);
+    console.log('[ElevenLabs] frontend prompt (%d chars):', prompt.length, prompt);
+    console.log('[ElevenLabs] backend prompt (%d chars):\n%s', backendPrompt.length, backendPrompt);
+    console.log('[ElevenLabs] instrument spec:', JSON.stringify(instrumentSpec));
 
     const rawDuration = metadata.durationSeconds;
     const totalDuration =
       typeof rawDuration === 'number' && rawDuration >= 0.5 ? rawDuration : undefined;
 
     const buffer = await (totalDuration !== undefined && totalDuration > MAX_SEGMENT_SECONDS
-      ? this.fetchMultiSegment(prompt, totalDuration)
-      : this.fetchSegment(prompt, totalDuration));
+      ? this.fetchMultiSegment(backendPrompt, totalDuration)
+      : this.fetchSegment(backendPrompt, totalDuration));
 
     const id = generateId();
     const outputDir = path.join(process.cwd(), 'public', 'generated');
@@ -48,6 +51,8 @@ export class ElevenLabsProvider implements MusicGenerationProvider {
       mood: analysis.mood,
       filename: `score-${analysis.mood}-${analysis.bpm}bpm.mp3`,
       prompt,
+      backendPrompt,
+      instrumentSpec,
     };
   }
 
@@ -71,7 +76,7 @@ export class ElevenLabsProvider implements MusicGenerationProvider {
   }
 
   private async fetchSegment(prompt: string, durationSeconds?: number): Promise<Buffer> {
-    const body: Record<string, unknown> = { text: prompt, prompt_influence: 0.3 };
+    const body: Record<string, unknown> = { text: prompt, prompt_influence: 0.5 };
     if (durationSeconds !== undefined) body.duration_seconds = durationSeconds;
 
     console.log('[ElevenLabs] segment body:', JSON.stringify(body));

@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import type { WorkflowState, VideoMetadata, AnalysisResult, GeneratedScore, StemResult } from '@/types';
+import type { WorkflowState, VideoMetadata, AnalysisResult, GeneratedScore, StemResult, InstrumentSpec } from '@/types';
 
 const defaultState: WorkflowState = {
   step: 'idle',
@@ -11,6 +11,7 @@ const defaultState: WorkflowState = {
   videoDurationSeconds: null,
   uploadedVideoPath: null,
   uploadedMetadata: null,
+  originalAudioUrl: null,
   analysis: null,
   score: null,
   error: null,
@@ -51,10 +52,13 @@ export function useWorkflow() {
       const form = new FormData();
       form.append('video', file);
       if (durationSeconds !== undefined) form.append('durationSeconds', String(durationSeconds));
-      return apiFetch<{ videoPath: string; filename: string; sizeBytes: number; durationSeconds?: number }>(
-        '/api/upload',
-        { method: 'POST', body: form }
-      );
+      return apiFetch<{
+        videoPath: string;
+        filename: string;
+        sizeBytes: number;
+        durationSeconds?: number;
+        originalAudioUrl?: string;
+      }>('/api/upload', { method: 'POST', body: form });
     },
     onSuccess: (data) => {
       setState((prev) => ({
@@ -66,6 +70,7 @@ export function useWorkflow() {
           sizeBytes: data.sizeBytes,
           durationSeconds: data.durationSeconds,
         },
+        originalAudioUrl: data.originalAudioUrl ?? null,
         error: null,
       }));
     },
@@ -93,11 +98,11 @@ export function useWorkflow() {
 
   // ── Stems ────────────────────────────────────────────────────────────────────
   const stemsMutation = useMutation({
-    mutationFn: async (audioUrl: string) =>
+    mutationFn: async (payload: { audioUrl: string; instrumentSpec?: InstrumentSpec }) =>
       apiFetch<StemResult>('/api/stems', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ audioUrl }),
+        body: JSON.stringify(payload),
       }),
     onSuccess: (data) => {
       setState((prev) => ({ ...prev, stemStep: 'stems_ready', stems: data, stemError: null }));
@@ -185,7 +190,10 @@ export function useWorkflow() {
   const separateStems = useCallback(() => {
     if (!state.score) return;
     setState((prev) => ({ ...prev, stemStep: 'separating', stemError: null }));
-    stemsMutation.mutate(state.score.audioUrl);
+    stemsMutation.mutate({
+      audioUrl: state.score.audioUrl,
+      instrumentSpec: state.score.instrumentSpec,
+    });
   }, [state.score, stemsMutation]);
 
   const reset = useCallback(() => {

@@ -1,13 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
 import { formatDuration } from '@/lib/utils';
 
 interface AudioPlayerProps {
   src: string;
+  videoRef?: RefObject<HTMLVideoElement | null>;
 }
 
-export function AudioPlayer({ src }: AudioPlayerProps) {
+export function AudioPlayer({ src, videoRef }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -18,42 +19,81 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
     const audio = audioRef.current;
     if (!audio) return;
 
+    // Reset all state for the incoming source before attaching listeners
+    audio.pause();
+    setIsPlaying(false);
+    setCurrentTime(0);
+    setDuration(0);
+    setIsLoaded(false);
+
     const onTimeUpdate = () => setCurrentTime(audio.currentTime);
     const onLoadedMetadata = () => { setDuration(audio.duration); setIsLoaded(true); };
-    const onEnded = () => { setIsPlaying(false); setCurrentTime(0); };
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(0);
+      const video = videoRef?.current;
+      if (video) { video.pause(); video.currentTime = 0; }
+    };
+    const onError = () => { setIsLoaded(false); setDuration(0); };
 
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
     audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
+
+    // Race condition guard: if the browser already loaded metadata before this
+    // effect ran (possible with local/cached files), fire the handler immediately.
+    if (audio.readyState >= 1) {
+      onLoadedMetadata();
+    } else {
+      // Explicitly trigger a load so the browser starts fetching the new src.
+      // React updates the src attribute before effects run, but some browsers
+      // need an explicit load() call to begin the fetch.
+      audio.load();
+    }
 
     return () => {
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
       audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
     };
-  }, [src]);
+  }, [src, videoRef]);
 
   const togglePlay = useCallback(async () => {
     const audio = audioRef.current;
+    const video = videoRef?.current ?? null;
     if (!audio || !isLoaded) return;
     if (isPlaying) {
       audio.pause();
+      video?.pause();
       setIsPlaying(false);
     } else {
       try {
+        if (video) {
+          // eslint-disable-next-line react-hooks/immutability
+          video.currentTime = audio.currentTime;
+          video.play().catch(() => {});
+        }
         await audio.play();
         setIsPlaying(true);
       } catch {
+        video?.pause();
         setIsPlaying(false);
       }
     }
-  }, [isPlaying, isLoaded]);
+  }, [isPlaying, isLoaded, videoRef]);
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
     const audio = audioRef.current;
+    const video = videoRef?.current ?? null;
     if (!audio || !isLoaded) return;
     const t = parseFloat(e.target.value);
     audio.currentTime = t;
+    if (video) {
+      // eslint-disable-next-line react-hooks/immutability
+      video.currentTime = t;
+    }
     setCurrentTime(t);
   };
 

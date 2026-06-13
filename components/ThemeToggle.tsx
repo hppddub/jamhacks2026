@@ -3,15 +3,16 @@
 import { useEffect, useState } from 'react';
 
 export function ThemeToggle() {
-  const [isDark, setIsDark] = useState(true);
+  // Initialize from localStorage. Guard against SSR — Next.js renders 'use client'
+  // components on the server for the initial HTML, where localStorage doesn't exist.
+  const [isDark, setIsDark] = useState(
+    () => typeof window === 'undefined' || localStorage.getItem('theme') !== 'light'
+  );
 
+  // Sync the DOM class whenever the React state changes (external system sync, no setState here)
   useEffect(() => {
-    const saved = localStorage.getItem('theme');
-    if (saved === 'light') {
-      setIsDark(false);
-      document.documentElement.classList.remove('dark');
-    }
-  }, []);
+    document.documentElement.classList.toggle('dark', isDark);
+  }, [isDark]);
 
   const toggle = () => {
     const next = !isDark;
