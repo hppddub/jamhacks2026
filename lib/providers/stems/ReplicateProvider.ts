@@ -1,7 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import type { StemSeparationProvider } from './types';
-import type { Stem, StemId, StemResult } from '@/types';
+import type { Stem, StemId, StemResult, InstrumentSpec } from '@/types';
 import { generateId, delay } from '@/lib/utils';
 
 // Find the current version hash at: https://replicate.com/lucataco/demucs
@@ -51,7 +51,10 @@ export class ReplicateProvider implements StemSeparationProvider {
     this.modelVersion = DEFAULT_MODEL_VERSION;
   }
 
-  async separate(sourceAudioUrl: string): Promise<StemResult> {
+  async separate(sourceAudioUrl: string, instrumentSpec?: InstrumentSpec): Promise<StemResult> {
+    if (instrumentSpec) {
+      console.log('[replicate] expected stems:', JSON.stringify(instrumentSpec));
+    }
     // Read local MP3 and encode as base64 data URI so Replicate can access it from any environment
     const localPath = path.join(process.cwd(), 'public', sourceAudioUrl);
     const fileBuffer = fs.readFileSync(localPath);
