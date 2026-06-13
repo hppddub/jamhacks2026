@@ -29,6 +29,7 @@ const MOOD_ROOT_FREQ: Record<string, number> = {
 };
 
 const ENERGY_DURATION: Record<string, number> = { low: 15, medium: 18, high: 22 };
+const MAX_MOCK_DURATION = 120; // cap mock synthesis at 2 min to avoid excessive memory use
 const ENERGY_AMPLITUDE: Record<string, number> = { low: 0.25, medium: 0.45, high: 0.65 };
 
 // I–IV–V–I chord progression as frequency ratios relative to root
@@ -39,12 +40,16 @@ const CHORD_PROGRESSION = [
   [1.0, 1.25, 1.5],     // I  return
 ];
 
-export function generateMp3(analysis: VideoAnalysis, outputPath: string): number {
+export function generateMp3(analysis: VideoAnalysis, outputPath: string, targetDurationSeconds?: number): number {
   const rootFreq = MOOD_ROOT_FREQ[analysis.mood] ?? 261.63;
-  const durationSeconds = ENERGY_DURATION[analysis.energyLevel] ?? 18;
+  const baseDuration = ENERGY_DURATION[analysis.energyLevel] ?? 18;
+  const durationSeconds = Math.min(
+    Math.max(targetDurationSeconds ?? baseDuration, 1),
+    MAX_MOCK_DURATION
+  );
   const amplitude = ENERGY_AMPLITUDE[analysis.energyLevel] ?? 0.45;
 
-  const totalSamples = SAMPLE_RATE * durationSeconds;
+  const totalSamples = Math.round(SAMPLE_RATE * durationSeconds);
   const barSamples = Math.round((60 / analysis.bpm) * 4 * SAMPLE_RATE);
 
   const pcm = new Int16Array(totalSamples);
@@ -104,5 +109,5 @@ export function generateMp3(analysis: VideoAnalysis, outputPath: string): number
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, buffer);
 
-  return durationSeconds;
+  return Math.round(durationSeconds * 10) / 10;
 }

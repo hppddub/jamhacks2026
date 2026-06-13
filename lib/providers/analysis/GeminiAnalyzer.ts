@@ -8,6 +8,12 @@ import type {
   EnergyLevel,
   Pace,
   TimelineSegment,
+  ColorPalette,
+  CameraStyle,
+  VisualPace,
+  SettingType,
+  AudioEnergyLevel,
+  MusicRole,
 } from '@/types';
 import { delay } from '@/lib/utils';
 
@@ -18,6 +24,12 @@ const VALID_MOODS: readonly Mood[] = [
 const VALID_ENERGY: readonly EnergyLevel[] = ['low', 'medium', 'high'];
 const VALID_PACES: readonly Pace[] = ['slow', 'moderate', 'fast'];
 const VALID_GENRES = ['cinematic', 'electronic', 'acoustic', 'orchestral', 'ambient', 'jazz'];
+const VALID_PALETTES: readonly ColorPalette[] = ['warm', 'cool', 'dark', 'bright', 'neutral'];
+const VALID_CAMERA: readonly CameraStyle[] = ['static', 'smooth', 'handheld', 'dynamic'];
+const VALID_VISUAL_PACE: readonly VisualPace[] = ['slow-cuts', 'moderate-cuts', 'fast-cuts'];
+const VALID_SETTINGS: readonly SettingType[] = ['nature', 'urban', 'intimate', 'cinematic', 'abstract', 'sports', 'documentary'];
+const VALID_AUDIO_ENERGY: readonly AudioEnergyLevel[] = ['silent', 'quiet', 'moderate', 'loud'];
+const VALID_MUSIC_ROLES: readonly MusicRole[] = ['background-underscore', 'featured-score', 'sync-to-action', 'ambient-complement'];
 
 function toMood(v: unknown): Mood {
   return VALID_MOODS.includes(v as Mood) ? (v as Mood) : 'emotional';
@@ -30,6 +42,24 @@ function toPace(v: unknown): Pace {
 }
 function toGenre(v: unknown): string {
   return VALID_GENRES.includes(v as string) ? (v as string) : 'cinematic';
+}
+function toColorPalette(v: unknown): ColorPalette | undefined {
+  return VALID_PALETTES.includes(v as ColorPalette) ? (v as ColorPalette) : undefined;
+}
+function toCameraStyle(v: unknown): CameraStyle | undefined {
+  return VALID_CAMERA.includes(v as CameraStyle) ? (v as CameraStyle) : undefined;
+}
+function toVisualPace(v: unknown): VisualPace | undefined {
+  return VALID_VISUAL_PACE.includes(v as VisualPace) ? (v as VisualPace) : undefined;
+}
+function toSettingType(v: unknown): SettingType | undefined {
+  return VALID_SETTINGS.includes(v as SettingType) ? (v as SettingType) : undefined;
+}
+function toAudioEnergyLevel(v: unknown): AudioEnergyLevel | undefined {
+  return VALID_AUDIO_ENERGY.includes(v as AudioEnergyLevel) ? (v as AudioEnergyLevel) : undefined;
+}
+function toMusicRole(v: unknown): MusicRole | undefined {
+  return VALID_MUSIC_ROLES.includes(v as MusicRole) ? (v as MusicRole) : undefined;
 }
 function toNumber(v: unknown, fallback: number): number {
   const n = Number(v);
@@ -63,6 +93,19 @@ const ANALYSIS_PROMPT = `Analyze this video carefully and return ONLY a raw JSON
   "motionScore": <float 0.0-1.0 — overall motion intensity>,
   "instrumentSuggestions": ["<instrument>", "<instrument>"] (2-4 instruments that suit the video's feel),
   "analysisSummary": "<1-2 sentences describing the video's emotional arc and visual style>",
+  "colorPalette": "<warm | cool | dark | bright | neutral — dominant color grading tone>",
+  "cameraStyle": "<static | smooth | handheld | dynamic — primary camera movement style>",
+  "visualPace": "<slow-cuts | moderate-cuts | fast-cuts — editing rhythm based on cut frequency>",
+  "settingType": "<nature | urban | intimate | cinematic | abstract | sports | documentary>",
+  "emotionalArc": "<one vivid sentence describing the emotional journey from the video's opening to its end>",
+  "sonicTexture": "<SOUND ONLY — no visual references. 8-12 words on sonic density, reverb, and warmth. e.g. 'rich, layered orchestral texture with spacious hall reverb and warm brass'>",
+  "musicalRecommendation": "<MUSIC ONLY — never describe what is seen. One sentence naming specific instruments, dynamics, and emotional quality of the sound. e.g. 'A soaring orchestral swell with French horns and full strings, building from gentle arpeggios to a triumphant fortissimo climax.'>",
+  "keyMode": "<major | minor | modal>",
+  "rhythmicFeel": "<5-8 words on rhythmic character — e.g. 'driving, syncopated eighth notes' or 'flowing, legato triplet pulse'>",
+  "dynamicArc": "<5-8 words on how intensity evolves using dynamic markings — e.g. 'pp whisper building to fff climax' or 'sustained forte with brief mp lulls'>",
+  "existingAudio": "<LISTEN to the audio track. Describe in 8-15 words what sounds are audible — e.g. 'crowd chatter and ambient noise', 'dialogue and occasional laughter', 'explosions and action sound effects', 'background music and nature sounds', or 'no audible sound'>",
+  "audioEnergyLevel": "<silent | quiet | moderate | loud — overall prominence of existing audio in the video>",
+  "musicRole": "<background-underscore | featured-score | sync-to-action | ambient-complement — how the composed score should relate to the existing audio: background-underscore if audio is loud/prominent (score sits quietly underneath), featured-score if audio is silent/quiet (score takes centre stage), sync-to-action if there are sound effects to hit (score syncs to beats), ambient-complement if there is ambient or natural sound (score enhances without competing)>",
   "timeline": [
     {
       "startSeconds": <number>,
@@ -78,7 +121,18 @@ Rules:
 - timeline must have 3-5 segments that together span 0 to videoDurationSeconds with no gaps
 - Each segment endSeconds equals the next segment startSeconds; the last endSeconds equals videoDurationSeconds
 - bpm: low energy → 60-90, medium → 90-120, high → 120-160
-- Reflect the actual visual content, color grading, camera motion, and emotional tone`;
+- colorPalette: observe the dominant grade — warm (golden/amber/red tones), cool (blue/teal), dark (low-key/shadows), bright (high-key/saturated), neutral (balanced/desaturated)
+- cameraStyle: static (locked off), smooth (gimbal/dolly), handheld (organic shake), dynamic (mixed fast movement)
+- visualPace: slow-cuts (<1 cut per 4s), moderate-cuts (1 cut per 1-4s), fast-cuts (>1 cut per second)
+- emotionalArc: be specific — name the feeling at the start and how it transforms by the end
+- sonicTexture: SOUND ONLY — no mention of people, places, or visuals. Describe only how the music sounds: density, reverb, warmth, texture
+- musicalRecommendation: MUSIC ONLY — pretend you are writing a brief for a composer who cannot see the video. Name specific instruments, dynamics, tempo feel, and emotional quality of the sound. Never say "the video shows" or reference any visual element
+- keyMode: major for uplifting/happy/triumphant/energetic, minor for dark/sad/dramatic/suspenseful, modal for mysterious/ethereal/ambient
+- rhythmicFeel: describe rhythmic energy only — e.g. "steady driving pulse", "syncopated, off-beat accents", "free-flowing rubato"
+- dynamicArc: use standard dynamic markings (pp, p, mp, mf, f, ff, fff) to map the intensity journey from start to end
+- existingAudio: LISTEN carefully to the audio track. Do not guess from visuals. Describe only what you actually hear. If there is no discernible audio, write "no audible sound"
+- audioEnergyLevel: rate how prominent or loud the existing audio is — silent (inaudible/none), quiet (subtle background), moderate (clearly present), loud (dominant/foreground)
+- musicRole: decide how a composed score should coexist with the existing audio — use the definitions above`;
 
 export class GeminiAnalyzer implements VideoAnalysisProvider {
   private ai: GoogleGenAI;
@@ -183,6 +237,33 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
         ? parsed.analysisSummary
         : `A ${toEnergy(parsed.energyLevel)}-energy ${toMood(parsed.mood)} video.`,
       timeline,
+      colorPalette: toColorPalette(parsed.colorPalette),
+      cameraStyle: toCameraStyle(parsed.cameraStyle),
+      visualPace: toVisualPace(parsed.visualPace),
+      settingType: toSettingType(parsed.settingType),
+      emotionalArc: typeof parsed.emotionalArc === 'string' && parsed.emotionalArc
+        ? parsed.emotionalArc
+        : undefined,
+      sonicTexture: typeof parsed.sonicTexture === 'string' && parsed.sonicTexture
+        ? parsed.sonicTexture
+        : undefined,
+      musicalRecommendation: typeof parsed.musicalRecommendation === 'string' && parsed.musicalRecommendation
+        ? parsed.musicalRecommendation
+        : undefined,
+      keyMode: ['major', 'minor', 'modal'].includes(parsed.keyMode as string)
+        ? (parsed.keyMode as 'major' | 'minor' | 'modal')
+        : undefined,
+      rhythmicFeel: typeof parsed.rhythmicFeel === 'string' && parsed.rhythmicFeel
+        ? parsed.rhythmicFeel
+        : undefined,
+      dynamicArc: typeof parsed.dynamicArc === 'string' && parsed.dynamicArc
+        ? parsed.dynamicArc
+        : undefined,
+      existingAudio: typeof parsed.existingAudio === 'string' && parsed.existingAudio
+        ? parsed.existingAudio
+        : undefined,
+      audioEnergyLevel: toAudioEnergyLevel(parsed.audioEnergyLevel),
+      musicRole: toMusicRole(parsed.musicRole),
     };
   }
 
