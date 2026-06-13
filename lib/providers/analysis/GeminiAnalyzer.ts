@@ -231,6 +231,10 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
             createPartFromUri(fileUri, fileMimeType),
             ANALYSIS_PROMPT,
           ]),
+          config: {
+            maxOutputTokens: 65536,
+            thinkingConfig: { thinkingBudget: 0 },
+          },
         });
       } catch (err) {
         lastError = err;

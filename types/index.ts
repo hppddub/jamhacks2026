@@ -122,6 +122,21 @@ export interface GeneratedScore {
   sections?: ScoreSection[];       // populated by ElevenMusicProvider (composition-plan sections)
 }
 
+export type StemId = 'drums' | 'bass' | 'melody' | 'vocals';
+export type StemStep = 'idle' | 'separating' | 'stems_ready' | 'stems_error';
+
+export interface Stem {
+  id: StemId;
+  label: string;
+  audioUrl: string;
+}
+
+export interface StemResult {
+  jobId: string;
+  stems: Stem[];
+  sourceAudioUrl: string;
+}
+
 export interface WorkflowState {
   step: WorkflowStep;
   videoFile: File | null;
@@ -131,4 +146,7 @@ export interface WorkflowState {
   analysis: AnalysisResult | null;
   score: GeneratedScore | null;
   error: string | null;
+  stemStep: StemStep;
+  stems: StemResult | null;
+  stemError: string | null;
 }

@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import type { WorkflowState, VideoMetadata, AnalysisResult, GeneratedScore } from '@/types';
+import type { WorkflowState, VideoMetadata, AnalysisResult, GeneratedScore, StemResult } from '@/types';
 
 const defaultState: WorkflowState = {
   step: 'idle',
@@ -13,6 +13,9 @@ const defaultState: WorkflowState = {
   analysis: null,
   score: null,
   error: null,
+  stemStep: 'idle',
+  stems: null,
+  stemError: null,
 };
 
 async function extractVideoDuration(file: File): Promise<number | undefined> {
@@ -87,6 +90,22 @@ export function useWorkflow() {
     },
   });
 
+  // ── Stems ────────────────────────────────────────────────────────────────────
+  const stemsMutation = useMutation({
+    mutationFn: async (audioUrl: string) =>
+      apiFetch<StemResult>('/api/stems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ audioUrl }),
+      }),
+    onSuccess: (data) => {
+      setState((prev) => ({ ...prev, stemStep: 'stems_ready', stems: data, stemError: null }));
+    },
+    onError: (err: Error) => {
+      setState((prev) => ({ ...prev, stemStep: 'stems_error', stemError: err.message }));
+    },
+  });
+
   // ── Generate ─────────────────────────────────────────────────────────────────
   const generateMutation = useMutation({
     mutationFn: async (analysis: AnalysisResult) => {
@@ -152,10 +171,16 @@ export function useWorkflow() {
     generateMutation.mutate(state.analysis!);
   }, [state.analysis, generateMutation]);
 
+  const separateStems = useCallback(() => {
+    if (!state.score) return;
+    setState((prev) => ({ ...prev, stemStep: 'separating', stemError: null }));
+    stemsMutation.mutate(state.score.audioUrl);
+  }, [state.score, stemsMutation]);
+
   const reset = useCallback(() => {
     if (state.videoObjectUrl) URL.revokeObjectURL(state.videoObjectUrl);
     setState(defaultState);
   }, [state.videoObjectUrl]);
 
-  return { state, selectFile, removeFile, upload, analyze, generate, reset };
+  return { state, selectFile, removeFile, upload, analyze, generate, separateStems, reset };
 }
