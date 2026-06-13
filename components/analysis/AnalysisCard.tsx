@@ -7,20 +7,20 @@ interface AnalysisCardProps {
 }
 
 const MOOD_BADGE: Record<string, string> = {
-  inspirational: 'bg-sky-500/10 text-sky-400 border-sky-500/20',
-  emotional:     'bg-violet-500/10 text-violet-400 border-violet-500/20',
-  dramatic:      'bg-red-500/10 text-red-400 border-red-500/20',
-  energetic:     'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  suspenseful:   'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  corporate:     'bg-blue-500/10 text-blue-400 border-blue-500/20',
-  happy:         'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
+  inspirational: 'bg-[#7CA0CB]/10 text-[#7CA0CB] border-[#7CA0CB]/20',
+  emotional:     'bg-[#6EA556]/10 text-[#6EA556] border-[#6EA556]/20',
+  dramatic:      'bg-[#B28B52]/10 text-[#B28B52] border-[#B28B52]/20 dark:bg-[#fdf3ab]/10 dark:text-[#fdf3ab] dark:border-[#fdf3ab]/20',
+  energetic:     'bg-[#ffcc18]/10 text-[#ffcc18] border-[#ffcc18]/20',
+  suspenseful:   'bg-[#6EA556]/10 text-[#6EA556] border-[#6EA556]/20',
+  corporate:     'bg-[#7CA0CB]/10 text-[#7CA0CB] border-[#7CA0CB]/20',
+  happy:         'bg-[#B28B52]/10 text-[#B28B52] border-[#B28B52]/20 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/20',
   calm:          'bg-green-500/10 text-green-400 border-green-500/20',
 };
 
 const ENERGY_BADGE: Record<string, string> = {
   low:    'bg-green-500/10 text-green-400 border-green-500/20',
-  medium: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-  high:   'bg-red-500/10 text-red-400 border-red-500/20',
+  medium: 'bg-[#B28B52]/10 text-[#B28B52] border-[#B28B52]/20 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/20',
+  high:   'bg-[#B28B52]/10 text-[#B28B52] border-[#B28B52]/20 dark:bg-[#fdf3ab]/10 dark:text-[#fdf3ab] dark:border-[#fdf3ab]/20',
 };
 
 function Badge({ label, className }: { label: string; className?: string }) {
@@ -41,18 +41,18 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
   const motionPct = Math.round(analysis.motionScore * 100);
 
   return (
-    <div className="animate-fade-in space-y-5 rounded-xl border border-zinc-700 bg-zinc-900 p-6">
+    <div className="animate-fade-in space-y-5 rounded-xl border border-navy-700 bg-navy-900 p-6">
       {/* Header row */}
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-500">
+          <p className="mb-1 text-xs font-medium uppercase tracking-wider text-cream-300">
             Analysis Complete
           </p>
-          <h3 className="text-lg font-semibold text-zinc-100">Video Profile</h3>
+          <h3 className="text-lg font-semibold text-cream-50">Video Profile</h3>
         </div>
         <div className="text-right">
-          <p className="text-4xl font-bold tabular-nums text-amber-500">{analysis.bpm}</p>
-          <p className="mt-0.5 text-xs text-zinc-500">BPM</p>
+          <p className="text-4xl font-bold tabular-nums text-[#ffcc18]">{analysis.bpm}</p>
+          <p className="mt-0.5 text-xs text-cream-300">BPM</p>
         </div>
       </div>
 
@@ -60,7 +60,7 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
       <div className="flex flex-wrap gap-2">
         <Badge
           label={analysis.mood}
-          className={MOOD_BADGE[analysis.mood] ?? 'bg-zinc-800 text-zinc-300 border-zinc-700'}
+          className={MOOD_BADGE[analysis.mood] ?? 'bg-navy-800 text-cream-100 border-navy-700'}
         />
         <Badge
           label={`${analysis.energyLevel} energy`}
@@ -68,30 +68,30 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
         />
         <Badge
           label={`${analysis.pace} pace`}
-          className="border-blue-500/20 bg-blue-500/10 text-blue-400"
+          className="border-[#7CA0CB]/20 bg-[#7CA0CB]/10 text-[#7CA0CB]"
         />
         <Badge
           label={analysis.genre}
-          className="border-zinc-700 bg-zinc-800 text-zinc-300"
+          className="border-navy-700 bg-navy-800 text-cream-100"
         />
       </div>
 
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
-        <div className="rounded-lg bg-zinc-800/50 px-4 py-3">
-          <p className="mb-1 text-xs text-zinc-500">Est. Scene Cuts</p>
-          <p className="text-xl font-semibold tabular-nums text-zinc-100">{analysis.sceneCount}</p>
+        <div className="rounded-lg bg-navy-800/50 px-4 py-3">
+          <p className="mb-1 text-xs text-cream-300">Est. Scene Cuts</p>
+          <p className="text-xl font-semibold tabular-nums text-cream-50">{analysis.sceneCount}</p>
         </div>
-        <div className="rounded-lg bg-zinc-800/50 px-4 py-3">
-          <p className="mb-2 text-xs text-zinc-500">Motion Score</p>
+        <div className="rounded-lg bg-navy-800/50 px-4 py-3">
+          <p className="mb-2 text-xs text-cream-300">Motion Score</p>
           <div className="flex items-center gap-2">
-            <div className="h-1.5 flex-1 rounded-full bg-zinc-700">
+            <div className="h-1.5 flex-1 rounded-full bg-navy-700">
               <div
-                className="h-full rounded-full bg-amber-500"
+                className="h-full rounded-full bg-[#ffcc18]"
                 style={{ width: `${motionPct}%` }}
               />
             </div>
-            <span className="w-8 text-right text-xs font-medium tabular-nums text-zinc-300">
+            <span className="w-8 text-right text-xs font-medium tabular-nums text-cream-100">
               {motionPct}%
             </span>
           </div>
@@ -100,14 +100,14 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
 
       {/* Instrument suggestions */}
       <div>
-        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-zinc-500">
+        <p className="mb-2 text-xs font-medium uppercase tracking-wider text-cream-300">
           Suggested Instruments
         </p>
         <div className="flex flex-wrap gap-1.5">
           {analysis.instrumentSuggestions.map((instr) => (
             <span
               key={instr}
-              className="rounded-md border border-zinc-700 bg-zinc-800 px-2.5 py-1 text-xs text-zinc-300"
+              className="rounded-md border border-navy-700 bg-navy-800 px-2.5 py-1 text-xs text-cream-100"
             >
               {instr}
             </span>
@@ -116,12 +116,12 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
       </div>
 
       {/* Summary */}
-      <p className="border-t border-zinc-800 pt-4 text-sm italic leading-relaxed text-zinc-400">
+      <p className="border-t border-navy-800 pt-4 text-sm italic leading-relaxed text-cream-200">
         {analysis.analysisSummary}
       </p>
 
       {/* Timeline arc */}
-      <div className="border-t border-zinc-800 pt-4">
+      <div className="border-t border-navy-800 pt-4">
         <TimelineBar segments={analysis.timeline} />
       </div>
     </div>

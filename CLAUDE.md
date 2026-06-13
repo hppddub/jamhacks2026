@@ -1,4 +1,4 @@
-# CLAUDE.md — Bananamov
+# CLAUDE.md — BananaMOV
 
 This file is the persistent technical memory for Claude Code working on this project. Read it fully at the start of every session before writing any code. It is the authoritative source of truth for architecture decisions, coding conventions, and implementation rules. SPEC.md is the product specification; this file is the engineering implementation guide.
 
@@ -6,7 +6,7 @@ This file is the persistent technical memory for Claude Code working on this pro
 
 ## Project Identity
 
-**Name:** Bananamov
+**Name:** BananaMOV
 **Purpose:** AI-powered video scoring platform — upload a video, analyze its visual arc across the timeline, generate a matching music score via ElevenLabs.
 **Context:** Built for JamHacks 2026. ElevenLabs is a track prize sponsor — ElevenLabs Sound Generation is the required production music API.
 **Status:** MVP. Full workflow is mocked by default; ElevenLabs is enabled via env var.

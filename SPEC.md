@@ -1,4 +1,4 @@
-# SPEC.md — Bananamov
+# SPEC.md — BananaMOV
 
 > AI-powered video scoring platform. Built for JamHacks 2026.
 > ElevenLabs is a track prize sponsor — ElevenLabs Sound Generation is the required music generation API.
@@ -7,7 +7,7 @@
 
 ## Overview
 
-Bananamov accepts a user-uploaded video, analyzes its visual characteristics across the video's timeline, and generates a matching music score via the ElevenLabs Sound Generation API. The MVP validates the full core workflow end-to-end: **Upload → Analyze → Generate → Preview → Download**.
+BananaMOV accepts a user-uploaded video, analyzes its visual characteristics across the video's timeline, and generates a matching music score via the ElevenLabs Sound Generation API. The MVP validates the full core workflow end-to-end: **Upload → Analyze → Generate → Preview → Download**.
 
 The video analysis produces a time-segmented arc (how mood and energy evolve throughout the video), which is collapsed into a single rich text prompt sent to ElevenLabs. The returned audio is served for preview and download.
 

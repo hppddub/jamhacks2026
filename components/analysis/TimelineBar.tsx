@@ -6,15 +6,15 @@ interface TimelineBarProps {
 }
 
 const ENERGY_BG: Record<string, string> = {
-  low: 'bg-green-500',
-  medium: 'bg-yellow-500',
-  high: 'bg-red-500',
+  low: 'bg-[#6EA556]',
+  medium: 'bg-[#fdf3ab]',
+  high: 'bg-[#FFCC18]',
 };
 
 const ENERGY_TEXT: Record<string, string> = {
-  low: 'text-green-950',
-  medium: 'text-yellow-950',
-  high: 'text-red-950',
+  low: 'text-[#1D2F45]',
+  medium: 'text-[#1D2F45]',
+  high: 'text-[#1D2F45]',
 };
 
 export function TimelineBar({ segments }: TimelineBarProps) {
@@ -24,7 +24,7 @@ export function TimelineBar({ segments }: TimelineBarProps) {
 
   return (
     <div className="space-y-2">
-      <p className="text-xs font-medium uppercase tracking-wider text-zinc-500">Video Arc</p>
+      <p className="text-xs font-medium uppercase tracking-wider text-cream-300">Video Arc</p>
 
       <div className="flex h-9 w-full overflow-hidden rounded-lg">
         {segments.map((seg, i) => {
@@ -56,7 +56,7 @@ export function TimelineBar({ segments }: TimelineBarProps) {
         })}
       </div>
 
-      <div className="flex justify-between text-xs text-zinc-600">
+      <div className="flex justify-between text-xs text-cream-400">
         <span>0s</span>
         <span>{totalDuration}s</span>
       </div>

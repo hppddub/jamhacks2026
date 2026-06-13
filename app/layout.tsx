@@ -7,7 +7,7 @@ const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'Bananamov — AI Video Scoring',
+  title: 'BananaMOV — AI Video Scoring',
   description:
     'Upload a video and receive a custom AI-generated music score matched to its mood, energy, and visual arc. Powered by ElevenLabs.',
 };

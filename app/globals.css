@@ -5,6 +5,20 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  /* Dynamic navy/cream tokens — values flip between :root (light) and .dark */
+  --color-navy-950: var(--navy-950);
+  --color-navy-900: var(--navy-900);
+  --color-navy-800: var(--navy-800);
+  --color-navy-700: var(--navy-700);
+  --color-navy-600: var(--navy-600);
+  --color-cream-50:  var(--cream-50);
+  --color-cream-100: var(--cream-100);
+  --color-cream-200: var(--cream-200);
+  --color-cream-300: var(--cream-300);
+  --color-cream-400: var(--cream-400);
+  --color-cream-500: var(--cream-500);
+
+  /* shadcn/ui tokens */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
@@ -48,59 +62,85 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* Light mode — warm parchment palette */
+  --navy-950: #F8F0E2;
+  --navy-900: #EFE3CA;
+  --navy-800: #E4D3B2;
+  --navy-700: #CFBB92;
+  --navy-600: #BAA478;
+  --cream-50:  #1D2F45;
+  --cream-100: #243D5C;
+  --cream-200: #6B5240;
+  --cream-300: #6B5240;
+  --cream-400: #4A3220;
+  --cream-500: #4A3220;
+
+  --background: #F8F0E2;
+  --foreground: #1D2F45;
+  --card: #EFE3CA;
+  --card-foreground: #1D2F45;
+  --popover: #EFE3CA;
+  --popover-foreground: #1D2F45;
+  --primary: #1D2F45;
+  --primary-foreground: #F8F0E2;
+  --secondary: #E4D3B2;
+  --secondary-foreground: #1D2F45;
+  --muted: #E4D3B2;
+  --muted-foreground: #6B5240;
+  --accent: #E4D3B2;
+  --accent-foreground: #1D2F45;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
+  --border: #CFBB92;
+  --input: #CFBB92;
+  --ring: #BAA478;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: #EFE3CA;
+  --sidebar-foreground: #1D2F45;
+  --sidebar-primary: #1D2F45;
+  --sidebar-primary-foreground: #F8F0E2;
+  --sidebar-accent: #E4D3B2;
+  --sidebar-accent-foreground: #1D2F45;
+  --sidebar-border: #CFBB92;
+  --sidebar-ring: #BAA478;
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  /* Dark mode — current navy palette */
+  --navy-950: #1D2F45;
+  --navy-900: #1F3550;
+  --navy-800: #243D5C;
+  --navy-700: #2D4B6E;
+  --navy-600: #3D5E84;
+  --cream-50:  #FDF6EB;
+  --cream-100: #EDE3D4;
+  --cream-200: #D7C09B;
+  --cream-300: #D7C09B;
+  --cream-400: #B28B52;
+  --cream-500: #B28B52;
+
+  --background: #1D2F45;
+  --foreground: #FDF6EB;
+  --card: #1F3550;
+  --card-foreground: #FDF6EB;
+  --popover: #1F3550;
+  --popover-foreground: #FDF6EB;
+  --primary: #FDF6EB;
+  --primary-foreground: #1D2F45;
+  --secondary: #243D5C;
+  --secondary-foreground: #FDF6EB;
+  --muted: #243D5C;
+  --muted-foreground: #D7C09B;
+  --accent: #243D5C;
+  --accent-foreground: #FDF6EB;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
+  --border: #2D4B6E;
+  --input: #2D4B6E;
+  --ring: #3D5E84;
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
   --chart-3: oklch(0.439 0 0);
