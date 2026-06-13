@@ -27,6 +27,13 @@ import type {
   ConfidenceScores,
   SafetyScores,
   FinalOutputScores,
+  AudioContentType,
+  DialogueTone,
+  DialogueSentiment,
+  SoundTexture,
+  VolumeDynamics,
+  DrumStyle,
+  VocalPresence,
 } from '@/types';
 import { delay } from '@/lib/utils';
 
@@ -36,13 +43,28 @@ const VALID_MOODS: readonly Mood[] = [
 ];
 const VALID_ENERGY: readonly EnergyLevel[] = ['low', 'medium', 'high'];
 const VALID_PACES: readonly Pace[] = ['slow', 'moderate', 'fast'];
-const VALID_GENRES = ['cinematic', 'electronic', 'acoustic', 'orchestral', 'ambient', 'jazz'];
+const VALID_GENRES = [
+  'lo-fi-hip-hop', 'hip-hop', 'pop', 'rock', 'indie', 'folk', 'acoustic',
+  'blues', 'r-and-b', 'jazz', 'electronic', 'dance', 'classical',
+  'orchestral', 'cinematic', 'ambient', 'world', 'punk',
+];
+const VALID_DRUM_STYLES: readonly DrumStyle[] = [
+  'none', 'acoustic-kit', 'brushed-jazz', 'lo-fi-compressed', 'electronic-808', 'orchestral-bass-drum',
+];
+const VALID_VOCAL_PRESENCES: readonly VocalPresence[] = [
+  'none', 'choir-pads', 'backing-harmonies', 'vocal-chops', 'humming', 'scat',
+];
 const VALID_PALETTES: readonly ColorPalette[] = ['warm', 'cool', 'dark', 'bright', 'neutral'];
 const VALID_CAMERA: readonly CameraStyle[] = ['static', 'smooth', 'handheld', 'dynamic'];
 const VALID_VISUAL_PACE: readonly VisualPace[] = ['slow-cuts', 'moderate-cuts', 'fast-cuts'];
 const VALID_SETTINGS: readonly SettingType[] = ['nature', 'urban', 'intimate', 'cinematic', 'abstract', 'sports', 'documentary'];
 const VALID_AUDIO_ENERGY: readonly AudioEnergyLevel[] = ['silent', 'quiet', 'moderate', 'loud'];
 const VALID_MUSIC_ROLES: readonly MusicRole[] = ['background-underscore', 'featured-score', 'sync-to-action', 'ambient-complement'];
+const VALID_AUDIO_CONTENT_TYPES: readonly AudioContentType[] = ['dialogue', 'sound_effects', 'background_music', 'ambient', 'silence'];
+const VALID_DIALOGUE_TONES: readonly DialogueTone[] = ['formal', 'casual', 'emotional', 'tense', 'upbeat'];
+const VALID_DIALOGUE_SENTIMENTS: readonly DialogueSentiment[] = ['positive', 'neutral', 'negative', 'mixed'];
+const VALID_SOUND_TEXTURES: readonly SoundTexture[] = ['sharp', 'blunt', 'soft', 'layered', 'sparse'];
+const VALID_VOLUME_DYNAMICS: readonly VolumeDynamics[] = ['consistent', 'building', 'dropping', 'erratic', 'dynamic'];
 
 function toMood(v: unknown): Mood {
   return VALID_MOODS.includes(v as Mood) ? (v as Mood) : 'emotional';
@@ -73,6 +95,28 @@ function toAudioEnergyLevel(v: unknown): AudioEnergyLevel | undefined {
 }
 function toMusicRole(v: unknown): MusicRole | undefined {
   return VALID_MUSIC_ROLES.includes(v as MusicRole) ? (v as MusicRole) : undefined;
+}
+function toAudioContentTypes(v: unknown): AudioContentType[] {
+  if (!Array.isArray(v)) return [];
+  return v.filter((x): x is AudioContentType => VALID_AUDIO_CONTENT_TYPES.includes(x as AudioContentType));
+}
+function toDialogueTone(v: unknown): DialogueTone | undefined {
+  return VALID_DIALOGUE_TONES.includes(v as DialogueTone) ? (v as DialogueTone) : undefined;
+}
+function toDialogueSentiment(v: unknown): DialogueSentiment | undefined {
+  return VALID_DIALOGUE_SENTIMENTS.includes(v as DialogueSentiment) ? (v as DialogueSentiment) : undefined;
+}
+function toSoundTexture(v: unknown): SoundTexture | undefined {
+  return VALID_SOUND_TEXTURES.includes(v as SoundTexture) ? (v as SoundTexture) : undefined;
+}
+function toVolumeDynamics(v: unknown): VolumeDynamics | undefined {
+  return VALID_VOLUME_DYNAMICS.includes(v as VolumeDynamics) ? (v as VolumeDynamics) : undefined;
+}
+function toDrumStyle(v: unknown): DrumStyle | undefined {
+  return VALID_DRUM_STYLES.includes(v as DrumStyle) ? (v as DrumStyle) : undefined;
+}
+function toVocalPresence(v: unknown): VocalPresence | undefined {
+  return VALID_VOCAL_PRESENCES.includes(v as VocalPresence) ? (v as VocalPresence) : undefined;
 }
 function toNumber(v: unknown, fallback: number): number {
   const n = Number(v);
@@ -115,7 +159,7 @@ const ANALYSIS_PROMPT = `Analyze this video carefully and return ONLY a raw JSON
   "energyLevel": "<low | medium | high>",
   "pace": "<slow | moderate | fast>",
   "bpm": <integer 60-160 — music tempo that matches the video energy>,
-  "genre": "<cinematic | electronic | acoustic | orchestral | ambient | jazz>",
+  "genre": "<lo-fi-hip-hop | hip-hop | pop | rock | indie | folk | acoustic | blues | r-and-b | jazz | electronic | dance | classical | orchestral | cinematic | ambient | world | punk>",
   "sceneCount": <integer — estimated number of distinct scene cuts>,
   "motionScore": <float 0.0-1.0 — overall motion intensity>,
   "instrumentSuggestions": ["<instrument>", "<instrument>"] (2-4 instruments that suit the video's feel),
@@ -135,6 +179,15 @@ const ANALYSIS_PROMPT = `Analyze this video carefully and return ONLY a raw JSON
   "musicRole": "<background-underscore | featured-score | sync-to-action | ambient-complement — how the composed score should relate to the existing audio: background-underscore if audio is loud/prominent (score sits quietly underneath), featured-score if audio is silent/quiet (score takes centre stage), sync-to-action if there are sound effects to hit (score syncs to beats), ambient-complement if there is ambient or natural sound (score enhances without competing)>",
   "contextType": "<sports | dance | product-video | security-footage | social-media | interview-reaction | general — primary detected use-case of this video>",
   "overallVideoScore": <0.0-1.0 quality score averaged across all segment finalOutputs.finalClipScore values>,
+  "audioContentTypes": ["<dialogue | sound_effects | background_music | ambient | silence>"] (array — include every type present; may have multiple),
+  "dialogueTone": "<formal | casual | emotional | tense | upbeat> — ONLY include when dialogue is present, otherwise omit this field",
+  "dialogueSentiment": "<positive | neutral | negative | mixed> — ONLY include when dialogue is present, otherwise omit this field",
+  "soundTexture": "<sharp | blunt | soft | layered | sparse — overall texture of non-music audio events: sharp = sudden loud transients like gunshots/impacts, blunt = heavy dull thuds, soft = gentle subtle sounds, layered = multiple simultaneous audio layers, sparse = few isolated sounds with silence between>",
+  "volumeDynamics": "<consistent | building | dropping | erratic | dynamic — how the overall audio volume changes across the video: consistent = stays level, building = gradually gets louder, dropping = gradually gets quieter, erratic = unpredictable spikes and drops, dynamic = intentional dramatic swells and pulls>",
+  "audioSummary": "<1 sentence summarising the audio landscape — what sounds are present, their texture, and how volume behaves across the video>",
+  "drumsAppropriate": <true | false — true when the genre and scene call for a drum kit or rhythm section; false for purely classical solo, ambient drone, intimate acoustic-only, or soundscapes with no rhythm>,
+  "drumStyle": "<none | acoustic-kit | brushed-jazz | lo-fi-compressed | electronic-808 | orchestral-bass-drum> — acoustic-kit for rock/pop/indie/blues; brushed-jazz for jazz; lo-fi-compressed for lo-fi-hip-hop; electronic-808 for electronic/dance/hip-hop; orchestral-bass-drum for orchestral/cinematic on structural accents only; none when drumsAppropriate is false",
+  "vocalPresence": "<none | choir-pads | backing-harmonies | vocal-chops | humming | scat> — default is none; choir-pads only for genuinely triumphant or transcendent orchestral/cinematic climaxes; backing-harmonies for pop/folk/indie emotional warmth; vocal-chops for electronic/hip-hop rhythmic texture; humming for intimate quiet introspective scenes; scat for jazz only; when in doubt choose none",
   "timeline": [
     {
       "startSeconds": <number>,
@@ -145,6 +198,9 @@ const ANALYSIS_PROMPT = `Analyze this video carefully and return ONLY a raw JSON
       "narrativeRole": "<intro | rising action | climax | falling action | resolution — where this segment sits in the overall emotional arc>",
       "musicalDescription": "<MUSIC ONLY — 6-12 words: specific instrument(s) with playing technique, dynamic marking (pp/p/mp/mf/f/ff/fff), and emotional texture for THIS segment only. e.g. 'legato violin section, pp, hushed and introspective with warm cello counterpoint' or 'full brass choir, fff, bold staccato fanfare with driving timpani' or 'solo piano, mf, flowing arpeggios, tender and searching'. Never reference visuals.>",
       "transitionToNext": "<4-8 words on the exact musical boundary motion from THIS segment to the NEXT — describe how the score dynamically shifts at this moment: e.g. 'strings swell to fortissimo climax', 'sudden drop to silence then re-entry', 'gradual ritardando and decrescendo', 'key modulation up a perfect fifth', 'tempo doubles into driving pulse'. null for the final segment>",
+      "audioNote": "<optional 5-10 words describing the dominant audio event in this segment — e.g. 'sharp impacts and crowd noise', 'quiet dialogue', 'silence', 'swelling background music'>",
+      "valence": <float 0.0-1.0 — emotional positivity: 0.0=very negative/dark/sad, 0.5=neutral/ambiguous, 1.0=very positive/uplifting/joyful>,
+      "arousal": <float 0.0-1.0 — energy/intensity: 0.0=very calm/still/sleepy, 0.5=moderate alertness, 1.0=extremely energetic/intense/excited>,
       "microScores": {
         "segmentation": { "shotChanges": <f>, "sceneChanges": <f>, "actionStartTime": <f>, "actionPeakTime": <f>, "actionEndTime": <f>, "segmentOverlap": <f> },
         "visualQuality": { "sharpness": <f>, "focusQuality": <f>, "exposure": <f>, "contrast": <f>, "brightnessStability": <f>, "colorBalance": <f>, "saturation": <f>, "noiseLevel": <f>, "compressionArtifacts": <f>, "motionBlur": <f>, "flicker": <f>, "distortion": <f> },
@@ -191,7 +247,19 @@ Rules:
 - Negative-sense fields (0.0 = none of the problem, 1.0 = worst): noiseLevel, compressionArtifacts (visualQuality), motionBlur, flicker, distortion, occlusionLevel (subjectAnalysis), cameraShake, jerkiness, backgroundNoiseLevel, predictionEntropy, ambiguityScore, missingDataRate, ALL safety fields (nsfwRisk, violenceRisk, privacyRisk, harmfulContentRisk, illegalContentRisk, faceSensitivity, moderationPenalty), penaltyScore (finalOutputs)
 - segmentation fields: shotChanges and sceneChanges are density scores 0-1 (0=none, 1=high density); actionStartTime/actionPeakTime/actionEndTime are relative timestamps within the segment 0-1; segmentOverlap is continuity quality 0-1
 - sceneUnderstanding strings: sceneCategory (e.g. "action", "dialogue", "landscape"), environmentType (e.g. "stadium", "office", "street"), indoorOutdoor ("indoor" | "outdoor" | "mixed"), activityType (primary observed activity)
-- finalOutputs: compute segmentScore from segmentation quality; eventScore from scene salience and event density; technicalScore from visualQuality and confidence; aestheticScore from subjectAnalysis and visual quality; engagementScore from attentionEngagement; taskScore from taskSpecific; penaltyScore from safety.moderationPenalty; confidenceAdjustedScore = weighted composite × confidence.modelConfidence; finalClipScore = confidenceAdjustedScore × (1 − penaltyScore)`;
+- finalOutputs: compute segmentScore from segmentation quality; eventScore from scene salience and event density; technicalScore from visualQuality and confidence; aestheticScore from subjectAnalysis and visual quality; engagementScore from attentionEngagement; taskScore from taskSpecific; penaltyScore from safety.moderationPenalty; confidenceAdjustedScore = weighted composite × confidence.modelConfidence; finalClipScore = confidenceAdjustedScore × (1 − penaltyScore)
+- audioContentTypes: identify ALL audio content types present — dialogue (spoken words), sound_effects (non-music events like impacts, doors, nature sounds), background_music (pre-existing music in the video), ambient (environmental noise like wind, room tone, crowd), silence (portions with no audio); include every type that appears
+- dialogueTone and dialogueSentiment: ONLY populate these when dialogue is actually audible. dialogueTone describes the manner of speaking; dialogueSentiment describes the emotional valence of what is being said
+- soundTexture: evaluate the character of transient audio events (sound effects, impacts, voices) — sharp = sudden high-frequency transients, blunt = heavy low-frequency impacts, soft = gentle understated sounds, layered = many audio sources simultaneously, sparse = isolated sounds with notable silence between them
+- volumeDynamics: evaluate how the overall audio level moves across the full video timeline
+- audioSummary: synthesise all audio observations into a single clear sentence a music composer could use
+- audioNote per segment: listen to each time segment individually and describe only what you hear in that window
+- genre: choose the single best-fit genre from the full list — lo-fi-hip-hop for mellow study/chill content; hip-hop for rap/urban; pop for mainstream catchy content; rock/indie/punk for guitar-driven energy; folk/acoustic for unplugged intimate content; blues for soulful slow content; r-and-b for smooth groove; jazz for swing/bebop; electronic/dance for synth-driven beats; classical for formal concert-hall; orchestral for large ensemble film style; cinematic for dramatic film-score feel; ambient for slow atmospheric; world for non-Western cultural music; default to cinematic only for genuinely dramatic filmic content
+- drumsAppropriate: true for hip-hop, pop, rock, indie, blues, r-and-b, jazz, electronic, dance, world, punk, cinematic with accents, orchestral with accents; false for classical solo, pure ambient, intimate acoustic-only, and soundscapes without any rhythm section
+- drumStyle: must match the genre — lo-fi-compressed for lo-fi-hip-hop; electronic-808 for hip-hop/electronic/dance; acoustic-kit for pop/rock/indie/blues/r-and-b; brushed-jazz for jazz; orchestral-bass-drum for orchestral/cinematic only on structural accents; none when drumsAppropriate is false
+- vocalPresence: default to none for all genres except when the content specifically warrants human vocal elements; choir-pads reserved for genuinely triumphant/transcendent orchestral climaxes; backing-harmonies for pop/folk/indie with clear emotional warmth; vocal-chops for electronic/hip-hop only; humming for quiet intimate introspection; scat for jazz; when uncertain choose none
+- valence per segment: 0.9 = graduation ceremony, celebration, sunrise; 0.7 = pleasant walk, gentle happiness; 0.5 = neutral commute, ambiguous scene; 0.3 = argument, disappointment; 0.1 = grief, horror, despair
+- arousal per segment: 0.9 = car chase, sports climax, crowd explosion; 0.7 = brisk activity, energetic montage; 0.5 = normal conversation, moderate pace; 0.3 = slow walk, quiet office; 0.1 = meditation, sleeping, still landscape`;
 
 function parseMicroScores(raw: unknown): MicroSegmentScores | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
@@ -395,8 +463,9 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
           model: 'gemini-2.5-flash',
           config: {
             responseMimeType: 'application/json',
-            maxOutputTokens: 32768,
+            maxOutputTokens: 65536,
             temperature: 0.1,
+            thinkingConfig: { thinkingBudget: 0 },
           },
           contents: createUserContent([
             createPartFromUri(fileUri, fileMimeType),
@@ -478,6 +547,20 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
       overallVideoScore: typeof parsed.overallVideoScore === 'number'
         ? Math.min(1, Math.max(0, parsed.overallVideoScore))
         : undefined,
+      audioContentTypes: toAudioContentTypes(parsed.audioContentTypes),
+      dialogueTone: toDialogueTone(parsed.dialogueTone),
+      dialogueSentiment: toDialogueSentiment(parsed.dialogueSentiment),
+      soundTexture: toSoundTexture(parsed.soundTexture),
+      volumeDynamics: toVolumeDynamics(parsed.volumeDynamics),
+      audioSummary: typeof parsed.audioSummary === 'string' && parsed.audioSummary
+        ? parsed.audioSummary
+        : undefined,
+      audioDialogueDominant: Array.isArray(parsed.audioContentTypes) &&
+        (parsed.audioContentTypes as unknown[]).includes('dialogue') &&
+        toAudioEnergyLevel(parsed.audioEnergyLevel) !== 'silent',
+      drumsAppropriate: typeof parsed.drumsAppropriate === 'boolean' ? parsed.drumsAppropriate : undefined,
+      drumStyle: toDrumStyle(parsed.drumStyle),
+      vocalPresence: toVocalPresence(parsed.vocalPresence),
     };
   }
 
@@ -504,6 +587,8 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
       const narrativeRole = typeof seg.narrativeRole === 'string' && VALID_NARRATIVE_ROLES.includes(seg.narrativeRole)
         ? seg.narrativeRole
         : undefined;
+      const rawValence = toNumber(seg.valence, -1);
+      const rawArousal = toNumber(seg.arousal, -1);
 
       return {
         startSeconds: toNumber(seg.startSeconds, 0),
@@ -514,6 +599,9 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
         musicalDescription,
         transitionToNext,
         narrativeRole,
+        audioNote: typeof seg.audioNote === 'string' && seg.audioNote ? seg.audioNote : undefined,
+        valence: rawValence >= 0 && rawValence <= 1 ? Math.round(rawValence * 100) / 100 : undefined,
+        arousal: rawArousal >= 0 && rawArousal <= 1 ? Math.round(rawArousal * 100) / 100 : undefined,
         microScores: parseMicroScores(seg.microScores),
       };
     });

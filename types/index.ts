@@ -204,6 +204,9 @@ export interface TimelineSegment {
   transitionToNext?: string;
   narrativeRole?: string;
   microScores?: MicroSegmentScores;
+  audioNote?: string;
+  valence?: number;
+  arousal?: number;
 }
 
 export type ColorPalette = 'warm' | 'cool' | 'dark' | 'bright' | 'neutral';
@@ -212,6 +215,35 @@ export type VisualPace = 'slow-cuts' | 'moderate-cuts' | 'fast-cuts';
 export type SettingType = 'nature' | 'urban' | 'intimate' | 'cinematic' | 'abstract' | 'sports' | 'documentary';
 export type AudioEnergyLevel = 'silent' | 'quiet' | 'moderate' | 'loud';
 export type MusicRole = 'background-underscore' | 'featured-score' | 'sync-to-action' | 'ambient-complement';
+
+export type AudioContentType = 'dialogue' | 'sound_effects' | 'background_music' | 'ambient' | 'silence';
+export type DialogueTone = 'formal' | 'casual' | 'emotional' | 'tense' | 'upbeat';
+export type DialogueSentiment = 'positive' | 'neutral' | 'negative' | 'mixed';
+export type SoundTexture = 'sharp' | 'blunt' | 'soft' | 'layered' | 'sparse';
+export type VolumeDynamics = 'consistent' | 'building' | 'dropping' | 'erratic' | 'dynamic';
+
+export type DrumStyle =
+  | 'none'
+  | 'acoustic-kit'
+  | 'brushed-jazz'
+  | 'lo-fi-compressed'
+  | 'electronic-808'
+  | 'orchestral-bass-drum';
+
+export type VocalPresence =
+  | 'none'
+  | 'choir-pads'
+  | 'backing-harmonies'
+  | 'vocal-chops'
+  | 'humming'
+  | 'scat';
+
+export interface InstrumentSpec {
+  drums: string[];
+  bass: string[];
+  vocals: string[];
+  melody: string[];
+}
 
 export interface VideoAnalysis {
   mood: Mood;
@@ -239,12 +271,46 @@ export interface VideoAnalysis {
   musicRole?: MusicRole;
   contextType?: VideoContextType;
   overallVideoScore?: number;
+  audioContentTypes?: AudioContentType[];
+  dialogueTone?: DialogueTone;
+  dialogueSentiment?: DialogueSentiment;
+  soundTexture?: SoundTexture;
+  volumeDynamics?: VolumeDynamics;
+  audioSummary?: string;
+  audioDialogueDominant?: boolean;
+  drumsAppropriate?: boolean;
+  drumStyle?: DrumStyle;
+  vocalPresence?: VocalPresence;
 }
 
 export interface AnalysisResult {
   videoPath: string;
   metadata: VideoMetadata;
   analysis: VideoAnalysis;
+}
+
+// ── ElevenLabs Music — composition plan (music_v1 "MusicPrompt" shape) ────────
+// Mirrors the /v1/music request body. Built by buildCompositionPlan() and sent
+// verbatim by ElevenMusicProvider. Field names match the API exactly.
+export interface MusicSection {
+  section_name: string;            // 1–100 chars
+  positive_local_styles: string[]; // musical directions to include for this section
+  negative_local_styles: string[]; // musical directions to avoid for this section
+  duration_ms: number;             // 3000–120000
+  lines: string[];                 // lyrics; empty array ⇒ instrumental
+}
+
+export interface CompositionPlan {
+  positive_global_styles: string[];
+  negative_global_styles: string[];
+  sections: MusicSection[];
+}
+
+// Human-friendly per-section summary returned to the client for display.
+export interface ScoreSection {
+  name: string;
+  durationSeconds: number;
+  styles: string[];
 }
 
 export interface GeneratedScore {
@@ -255,6 +321,24 @@ export interface GeneratedScore {
   mood: Mood;
   filename: string;
   prompt: string;
+  backendPrompt: string;
+  instrumentSpec: InstrumentSpec;
+  sections?: ScoreSection[];       // populated by ElevenMusicProvider (composition-plan sections)
+}
+
+export type StemId = 'drums' | 'bass' | 'melody' | 'vocals';
+export type StemStep = 'idle' | 'separating' | 'stems_ready' | 'stems_error';
+
+export interface Stem {
+  id: StemId;
+  label: string;
+  audioUrl: string;
+}
+
+export interface StemResult {
+  jobId: string;
+  stems: Stem[];
+  sourceAudioUrl: string;
 }
 
 export interface WorkflowState {
@@ -263,7 +347,12 @@ export interface WorkflowState {
   videoObjectUrl: string | null;
   uploadedVideoPath: string | null;
   uploadedMetadata: VideoMetadata | null;
+  /** Browser-playable MP3 of the video's original audio (ffmpeg-extracted at upload); null when unavailable. */
+  originalAudioUrl: string | null;
   analysis: AnalysisResult | null;
   score: GeneratedScore | null;
   error: string | null;
+  stemStep: StemStep;
+  stems: StemResult | null;
+  stemError: string | null;
 }

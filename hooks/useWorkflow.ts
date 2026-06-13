@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import type { WorkflowState, VideoMetadata, AnalysisResult, GeneratedScore } from '@/types';
+import type { WorkflowState, VideoMetadata, AnalysisResult, GeneratedScore, StemResult, InstrumentSpec } from '@/types';
 
 const defaultState: WorkflowState = {
   step: 'idle',
@@ -10,9 +10,13 @@ const defaultState: WorkflowState = {
   videoObjectUrl: null,
   uploadedVideoPath: null,
   uploadedMetadata: null,
+  originalAudioUrl: null,
   analysis: null,
   score: null,
   error: null,
+  stemStep: 'idle',
+  stems: null,
+  stemError: null,
 };
 
 async function extractVideoDuration(file: File): Promise<number | undefined> {
@@ -47,10 +51,13 @@ export function useWorkflow() {
       const form = new FormData();
       form.append('video', file);
       if (durationSeconds !== undefined) form.append('durationSeconds', String(durationSeconds));
-      return apiFetch<{ videoPath: string; filename: string; sizeBytes: number; durationSeconds?: number }>(
-        '/api/upload',
-        { method: 'POST', body: form }
-      );
+      return apiFetch<{
+        videoPath: string;
+        filename: string;
+        sizeBytes: number;
+        durationSeconds?: number;
+        originalAudioUrl?: string;
+      }>('/api/upload', { method: 'POST', body: form });
     },
     onSuccess: (data) => {
       setState((prev) => ({
@@ -62,6 +69,7 @@ export function useWorkflow() {
           sizeBytes: data.sizeBytes,
           durationSeconds: data.durationSeconds,
         },
+        originalAudioUrl: data.originalAudioUrl ?? null,
         error: null,
       }));
     },
@@ -84,6 +92,22 @@ export function useWorkflow() {
     },
     onError: (err: Error) => {
       setState((prev) => ({ ...prev, step: 'uploaded', error: err.message }));
+    },
+  });
+
+  // ── Stems ────────────────────────────────────────────────────────────────────
+  const stemsMutation = useMutation({
+    mutationFn: async (payload: { audioUrl: string; instrumentSpec?: InstrumentSpec }) =>
+      apiFetch<StemResult>('/api/stems', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }),
+    onSuccess: (data) => {
+      setState((prev) => ({ ...prev, stemStep: 'stems_ready', stems: data, stemError: null }));
+    },
+    onError: (err: Error) => {
+      setState((prev) => ({ ...prev, stemStep: 'stems_error', stemError: err.message }));
     },
   });
 
@@ -152,10 +176,19 @@ export function useWorkflow() {
     generateMutation.mutate(state.analysis!);
   }, [state.analysis, generateMutation]);
 
+  const separateStems = useCallback(() => {
+    if (!state.score) return;
+    setState((prev) => ({ ...prev, stemStep: 'separating', stemError: null }));
+    stemsMutation.mutate({
+      audioUrl: state.score.audioUrl,
+      instrumentSpec: state.score.instrumentSpec,
+    });
+  }, [state.score, stemsMutation]);
+
   const reset = useCallback(() => {
     if (state.videoObjectUrl) URL.revokeObjectURL(state.videoObjectUrl);
     setState(defaultState);
   }, [state.videoObjectUrl]);
 
-  return { state, selectFile, removeFile, upload, analyze, generate, reset };
+  return { state, selectFile, removeFile, upload, analyze, generate, separateStems, reset };
 }

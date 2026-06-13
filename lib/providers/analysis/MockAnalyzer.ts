@@ -26,6 +26,11 @@ import type {
   ConfidenceScores,
   SafetyScores,
   FinalOutputScores,
+  AudioContentType,
+  DialogueTone,
+  DialogueSentiment,
+  SoundTexture,
+  VolumeDynamics,
 } from '@/types';
 import { seededRandom, hashString, delay } from '@/lib/utils';
 
@@ -225,6 +230,37 @@ const EXISTING_AUDIO_DESCRIPTIONS: string[] = [
   'speech and ambient city noise',
   'music and applause',
 ];
+
+const AUDIO_CONTENT_TYPE_SETS: AudioContentType[][] = [
+  ['dialogue', 'background_music'],
+  ['sound_effects', 'ambient'],
+  ['dialogue', 'sound_effects'],
+  ['background_music', 'ambient'],
+  ['ambient'],
+  ['dialogue'],
+  ['sound_effects'],
+  ['silence'],
+  ['dialogue', 'ambient'],
+  ['sound_effects', 'background_music'],
+];
+
+const DIALOGUE_TONES: DialogueTone[] = ['formal', 'casual', 'emotional', 'tense', 'upbeat'];
+const DIALOGUE_SENTIMENTS: DialogueSentiment[] = ['positive', 'neutral', 'negative', 'mixed'];
+const SOUND_TEXTURES: SoundTexture[] = ['sharp', 'blunt', 'soft', 'layered', 'sparse'];
+const VOLUME_DYNAMICS: VolumeDynamics[] = ['consistent', 'building', 'dropping', 'erratic', 'dynamic'];
+
+const SEGMENT_AUDIO_NOTES: string[] = [
+  'quiet dialogue and room tone',
+  'sharp impacts and sudden noise bursts',
+  'swelling background music',
+  'ambient environmental noise',
+  'silence with subtle room tone',
+  'layered crowd noise and chatter',
+  'heavy bass impacts and reverb',
+  'soft whispered speech',
+  'erratic sound effects and movement noise',
+  'building musical underscore',
+];
 const INSTRUMENTS = [
   'strings', 'piano', 'drums', 'guitar', 'bass', 'brass',
   'flute', 'synth', 'violin', 'cello', 'percussion', 'choir',
@@ -343,8 +379,9 @@ export class MockAnalyzer implements VideoAnalysisProvider {
       const posLabel = i === 0 ? 'Opening' : i === segCount - 1 ? 'Resolution' : 'Mid';
       const label = `${posLabel} — ${mood}, ${energyLevel} energy`;
       const musicalDescription = pick(MUSICAL_DESC_BY_ENERGY[energyLevel], rand);
+      const audioNote = pick(SEGMENT_AUDIO_NOTES, rand);
 
-      timeline.push({ startSeconds, endSeconds, mood, energyLevel, label, musicalDescription });
+      timeline.push({ startSeconds, endSeconds, mood, energyLevel, label, musicalDescription, audioNote });
       cursor += raw;
     }
 
@@ -462,6 +499,22 @@ export class MockAnalyzer implements VideoAnalysisProvider {
       audioEnergyLevel === 'moderate' ? pick(['sync-to-action', 'ambient-complement'] as MusicRole[], rand) :
       'ambient-complement';
 
+    const audioContentTypes = pick(AUDIO_CONTENT_TYPE_SETS, rand);
+    const hasDialogue = audioContentTypes.includes('dialogue') && audioEnergyLevel !== 'silent';
+    const dialogueTone: DialogueTone | undefined = hasDialogue ? pick(DIALOGUE_TONES, rand) : undefined;
+    const dialogueSentiment: DialogueSentiment | undefined = hasDialogue ? pick(DIALOGUE_SENTIMENTS, rand) : undefined;
+    const soundTexture = pick(SOUND_TEXTURES, rand);
+    const volumeDynamics = pick(VOLUME_DYNAMICS, rand);
+    const audioDialogueDominant = hasDialogue && audioContentTypes.length === 1;
+
+    const audioSummary = hasDialogue
+      ? `${dialogueTone ?? 'conversational'} dialogue with ${soundTexture} texture and ${volumeDynamics} volume levels throughout.`
+      : audioContentTypes.includes('sound_effects')
+        ? `${soundTexture} sound effects with ${volumeDynamics} volume dynamics and ${audioEnergyLevel} overall energy.`
+        : audioContentTypes.includes('background_music')
+          ? `Background music with ${soundTexture} texture and ${volumeDynamics} volume arc.`
+          : `${audioEnergyLevel === 'silent' ? 'Near-silent audio' : 'Ambient audio'} with ${soundTexture} texture and ${volumeDynamics} dynamics.`;
+
     const analysis: VideoAnalysis = {
       mood: peak.mood,
       energyLevel: peak.energyLevel,
@@ -488,6 +541,13 @@ export class MockAnalyzer implements VideoAnalysisProvider {
       musicRole,
       contextType,
       overallVideoScore,
+      audioContentTypes,
+      dialogueTone,
+      dialogueSentiment,
+      soundTexture,
+      volumeDynamics,
+      audioSummary,
+      audioDialogueDominant,
     };
 
     return { videoPath, metadata, analysis };
