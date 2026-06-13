@@ -29,7 +29,8 @@ jamhacks2026/
 │   └── api/
 │       ├── upload/route.ts                ← POST /api/upload
 │       ├── analyze/route.ts               ← POST /api/analyze
-│       └── generate/route.ts              ← POST /api/generate
+│       ├── generate/route.ts              ← POST /api/generate
+│       └── stems/route.ts                 ← POST /api/stems (maxDuration=180)
 ├── components/
 │   ├── upload/
 │   │   ├── DropZone.tsx
@@ -39,7 +40,8 @@ jamhacks2026/
 │   │   └── TimelineBar.tsx                ← horizontal colored segment timeline
 │   ├── player/
 │   │   ├── AudioPlayer.tsx                ← custom HTML Audio API player + waveform
-│   │   └── DownloadButton.tsx
+│   │   ├── DownloadButton.tsx
+│   │   └── StemPlayer.tsx                 ← per-stem mini player grid
 │   └── ui/                                ← shadcn/ui generated (never edit manually)
 ├── hooks/
 │   └── useWorkflow.ts                     ← state machine + all TanStack Query mutations
@@ -54,8 +56,14 @@ jamhacks2026/
 │   │       ├── buildPrompt.ts             ← shared prompt + tags construction
 │   │       ├── MockMusicProvider.ts       ← lamejs PCM synthesis → real MP3
 │   │       └── ElevenLabsProvider.ts      ← ElevenLabs Sound Generation API
+│   │   └── stems/
+│   │       ├── types.ts                   ← StemSeparationProvider interface
+│   │       ├── factory.ts                 ← getStemProvider()
+│   │       ├── MockStemProvider.ts        ← PCM-synthesised mock stems
+│   │       ├── LocalDemucsProvider.ts     ← free: runs python -m demucs as subprocess
+│   │       └── ReplicateProvider.ts       ← Replicate Demucs v4 stem separation (costs $)
 │   ├── audio/
-│   │   └── generateTone.ts               ← PCM synthesis + lamejs MP3 encoding (mock only)
+│   │   └── generateTone.ts               ← PCM synthesis + lamejs MP3 encoding; generateStemMp3 for mock stems
 │   └── utils.ts                           ← cn, formatDuration, formatFileSize,
 │                                          ←   seededRandom, hashString, generateId, delay
 ├── types/
@@ -481,6 +489,125 @@ Energy indices: 0=low, 1=medium, 2=high.
 - **Delay:** `delay(3000 + Math.random() * 2000)` (3–5 seconds) applied AFTER synthesis
 - Filename: `score-${analysis.mood}-${analysis.bpm}bpm.mp3`
 
+### MockStemProvider (`lib/providers/stems/MockStemProvider.ts`)
+
+- Implements `StemSeparationProvider`; ignores the source audio URL entirely (can't decode MP3 in pure Node)
+- Generates 4 stems using `generateStemMp3` with fixed musical parameters:
+  - `drums` (80 Hz, amplitude 0.55, `percussive`) — noise burst + kick thump on beats 1 & 3
+  - `bass` (65.41 Hz / C2, amplitude 0.50, `continuous`) — deep sine + first harmonic
+  - `melody` (261.63 Hz / C4, amplitude 0.40, `continuous`) — mid-range harmonic sine
+  - `vocals` (392.00 Hz / G4, amplitude 0.08, `sparse`) — near-silent sporadic tones
+- Fixed duration of 20 seconds and BPM of 100 for all mock stems
+- Writes stems to `public/stems/{jobId}/{stemId}.mp3`
+- **Delay:** `delay(2000 + Math.random() * 1500)` (2–3.5 seconds) applied AFTER synthesis
+
+---
+
+## Stem Separation — Implementation Details
+
+### Type System (`types/index.ts`)
+```ts
+export type StemId   = 'drums' | 'bass' | 'melody' | 'vocals';
+export type StemStep = 'idle' | 'separating' | 'stems_ready' | 'stems_error';
+
+export interface Stem {
+  id: StemId;
+  label: string;    // e.g. "Drums & Percussion"
+  audioUrl: string; // e.g. /stems/{jobId}/drums.mp3
+}
+
+export interface StemResult {
+  jobId: string;
+  stems: Stem[];
+  sourceAudioUrl: string;
+}
+```
+
+`WorkflowState` additions:
+```ts
+stemStep:  StemStep;       // starts 'idle', resets to 'idle' on reset()
+stems:     StemResult | null;
+stemError: string | null;
+```
+
+### Provider Interface (`lib/providers/stems/types.ts`)
+```ts
+export interface StemSeparationProvider {
+  separate(audioUrl: string): Promise<StemResult>;
+}
+```
+
+### Factory (`lib/providers/stems/factory.ts`)
+- Reads `STEM_PROVIDER` env var (default `'mock'`)
+- Returns `LocalDemucsProvider` for `'local'`, `ReplicateProvider` for `'replicate'`, else `MockStemProvider`
+
+### LocalDemucsProvider (`lib/providers/stems/LocalDemucsProvider.ts`) — **Recommended free provider**
+- Runs `python -m demucs` as a subprocess using Node's `spawnSync` — no API key, no cost
+- Python executable: `process.env.DEMUCS_PYTHON_CMD ?? 'python'` (override with `DEMUCS_PYTHON_CMD=python3` if needed)
+- Command: `python -m demucs --mp3 --mp3-bitrate 128 -n htdemucs --out {tmpDir} {localPath}`
+- **Requirements:** `pip install demucs` + `ffmpeg` in PATH
+- Output structure: `.tmp-demucs/{jobId}/htdemucs/{trackName}/{stem}.mp3`
+  - Demucs filenames: `drums.mp3`, `bass.mp3`, `other.mp3`, `vocals.mp3`
+  - `other` maps to `StemId = 'melody'`
+- Files copied to `public/stems/{jobId}/`, temp dir cleaned up after (also cleaned on error)
+- Timeout: 300 seconds (`spawnSync` option)
+- Error messages surface common failures: Python not in PATH, demucs not installed, ffmpeg missing
+- Temp directory `.tmp-demucs/` is gitignored
+
+### ReplicateProvider (`lib/providers/stems/ReplicateProvider.ts`)
+- Constructor throws if `REPLICATE_API_KEY` or `REPLICATE_MODEL_VERSION` are absent
+- Reads the local MP3 from `path.join(process.cwd(), 'public', audioUrl)`, converts to `data:audio/mpeg;base64,...` (avoids localhost/public URL problem in dev)
+- `POST https://api.replicate.com/v1/predictions` with `version`, `input: { audio: dataUri, stem: 'none', shifts: 1, overlap: 0.25, mp3_bitrate: 128 }`
+- Polls `prediction.urls.get` every 3 seconds, up to 60 attempts (3 minutes)
+- On success: downloads each stem URL from `output.{drums,bass,other,vocals}`, saves to `public/stems/{jobId}/{stemId}.mp3`
+- Replicate's `other` key maps to `StemId = 'melody'`
+- Returns stems sorted in canonical order: `drums → bass → melody → vocals`
+
+### `generateStemMp3` (`lib/audio/generateTone.ts`)
+```ts
+export interface StemConfig {
+  frequency: number;
+  amplitude: number;
+  durationSeconds: number;
+  bpm: number;
+  pattern: 'continuous' | 'percussive' | 'sparse';
+}
+export function generateStemMp3(config: StemConfig, outputPath: string): void
+```
+
+- `continuous`: fundamental sine + first harmonic (÷1.3 to normalise), soft bar envelope
+- `percussive`: noise burst on every beat + pitch-dropping sine kick on beats 1 & 3 of each bar
+- `sparse`: deterministic per-beat activation (`Math.abs(Math.sin(beatIndex * 7.3 + 1.2)) > 0.92`), very low amplitude — simulates near-silent vocals on instrumental audio
+- Calls shared `encodePcmToMp3(pcm, outputPath)` helper (also used by `generateMp3`)
+
+### `app/api/stems/route.ts`
+- `export const maxDuration = 180` — required for Replicate polling on Vercel
+- Validates `body.audioUrl` starts with `/generated/`
+- Surfaces provider error messages to client (same pattern as other routes)
+
+### `useWorkflow` stem additions
+```ts
+separateStems: () => void   // sets stemStep: 'separating', fires stemsMutation with score.audioUrl
+```
+- `stemsMutation.onSuccess` → `stemStep: 'stems_ready'`, `stems: StemResult`
+- `stemsMutation.onError` → `stemStep: 'stems_error'`, `stemError: err.message`
+- `reset()` clears all three stem fields back to `defaultState`
+
+### `StemPlayer` (`components/player/StemPlayer.tsx`)
+- `'use client'`; accepts `{ result: StemResult }`
+- Renders a `StemRow` per stem; each row has its own isolated audio state
+- Row layout: colored dot, label, 20-bar mini waveform, play/pause button, seek slider, download anchor
+- Waveform heights computed with distinct sine/cosine params per `StemId` for visual differentiation
+- Stem colors: drums=`#f97316` (orange), bass=`#a855f7` (purple), melody=`#ffcc18` (amber), vocals=`#2dd4bf` (teal)
+- Shows "Vocals may be near-silent — this score is instrumental" note below the header
+- Stem audio stored at `public/stems/{jobId}/` (gitignored)
+
+### `app/page.tsx` stem UI (inside `step === 'completed'` section, after `<DownloadButton>`)
+- `stemStep === 'idle'` → zinc-style secondary button "Split into Stems →"
+- `stemStep === 'separating'` → `<Spinner label="Separating audio stems…" />`
+- `stemStep === 'stems_error'` → `<ErrorBanner>` with retry calling `separateStems`
+- `stemStep === 'stems_ready' && stems` → `<StemPlayer result={stems} />`
+
 ---
 
 ## Audio Generation (`lib/audio/generateTone.ts`) — Implementation Details
@@ -580,6 +707,12 @@ export async function POST(request: Request) {
 - Validates: `body.analysis`, `body.videoPath`, `body.metadata` all present
 - Calls `getMusicProvider().generate(body as AnalysisResult)`
 - Returns `GeneratedScore` directly
+
+### POST `/api/stems`
+- Validates: `body.audioUrl` must be a string starting with `/generated/`
+- Calls `getStemProvider().separate(body.audioUrl)`
+- Returns `StemResult` directly
+- Exports `export const maxDuration = 180` — required for Replicate polling on Vercel (3-minute cap)
 
 ---
 
@@ -796,6 +929,10 @@ ANALYSIS_PROVIDER=mock
 MUSIC_PROVIDER=elevenlabs
 ELEVENLABS_API_KEY=your_key_here
 GEMINI_API_KEY=your_key_here
+STEM_PROVIDER=local
+DEMUCS_PYTHON_CMD=python
+REPLICATE_API_KEY=your_key_here
+REPLICATE_MODEL_VERSION=<hash from https://replicate.com/lucataco/demucs>
 ```
 
 ### `.env.example` (committed — no real keys)
@@ -804,10 +941,13 @@ ANALYSIS_PROVIDER=mock
 MUSIC_PROVIDER=mock
 ELEVENLABS_API_KEY=
 GEMINI_API_KEY=
+STEM_PROVIDER=mock
+REPLICATE_API_KEY=
+REPLICATE_MODEL_VERSION=
 ```
 
 ### Factory defaults
-If env vars are absent, both factories default to `'mock'`. No API keys needed for local dev.
+If env vars are absent, all factories default to `'mock'`. No API keys needed for local dev.
 
 | Var | Default | Options |
 |---|---|---|
@@ -815,6 +955,10 @@ If env vars are absent, both factories default to `'mock'`. No API keys needed f
 | `MUSIC_PROVIDER` | `mock` | `mock`, `elevenlabs` |
 | `ELEVENLABS_API_KEY` | — | Required when `MUSIC_PROVIDER=elevenlabs` |
 | `GEMINI_API_KEY` | — | Required when `ANALYSIS_PROVIDER=gemini` |
+| `STEM_PROVIDER` | `mock` | `mock`, `local`, `replicate` |
+| `DEMUCS_PYTHON_CMD` | `python` | Override Python executable when `STEM_PROVIDER=local` (e.g. `python3`) |
+| `REPLICATE_API_KEY` | — | Required when `STEM_PROVIDER=replicate` |
+| `REPLICATE_MODEL_VERSION` | — | Required when `STEM_PROVIDER=replicate`; find hash at replicate.com/lucataco/demucs |
 
 ---
 
@@ -832,6 +976,8 @@ If env vars are absent, both factories default to `'mock'`. No API keys needed f
 ```
 public/uploads/
 public/generated/
+public/stems/
+.tmp-demucs/
 .env.local
 ```
 

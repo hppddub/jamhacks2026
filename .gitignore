@@ -45,3 +45,5 @@ next-env.d.ts
 # runtime generated files
 /public/uploads/
 /public/generated/
+/public/stems/
+/.tmp-demucs/
