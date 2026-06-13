@@ -5,6 +5,7 @@ import { VideoPreview } from '@/components/upload/VideoPreview';
 import { AnalysisCard } from '@/components/analysis/AnalysisCard';
 import { AudioPlayer } from '@/components/player/AudioPlayer';
 import { DownloadButton } from '@/components/player/DownloadButton';
+import { StemPlayer } from '@/components/player/StemPlayer';
 import { useWorkflow } from '@/hooks/useWorkflow';
 import { ThemeToggle } from '@/components/ThemeToggle';
 
@@ -76,8 +77,8 @@ const STEP_ORDER: Record<string, number> = {
 };
 
 export default function Home() {
-  const { state, selectFile, removeFile, upload, analyze, generate, reset } = useWorkflow();
-  const { step, videoFile, videoObjectUrl, analysis, score, error } = state;
+  const { state, selectFile, removeFile, upload, analyze, generate, separateStems, reset } = useWorkflow();
+  const { step, videoFile, videoObjectUrl, analysis, score, error, stemStep, stems, stemError } = state;
 
   const isUploading = step === 'uploading';
   const isAnalyzing = step === 'analyzing';
@@ -280,6 +281,30 @@ export default function Home() {
 
             <AudioPlayer src={score.audioUrl} />
             <DownloadButton score={score} />
+
+            {/* Stem separation */}
+            {stemStep === 'idle' && (
+              <button
+                onClick={separateStems}
+                className="w-full rounded-xl border border-navy-700 bg-navy-800 py-3 text-sm font-semibold text-cream-100 transition-all hover:bg-navy-700 active:scale-[0.99]"
+              >
+                Split into Stems →
+              </button>
+            )}
+
+            {stemStep === 'separating' && <Spinner label="Separating audio stems…" />}
+
+            {stemStep === 'stems_error' && stemError && (
+              <ErrorBanner
+                message={stemError}
+                onRetry={separateStems}
+                onReset={reset}
+              />
+            )}
+
+            {stemStep === 'stems_ready' && stems && (
+              <StemPlayer result={stems} />
+            )}
 
             <div className="rounded-xl border border-navy-800 bg-navy-900/50 p-4 text-center">
               <p className="text-sm text-cream-300">
