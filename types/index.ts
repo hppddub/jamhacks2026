@@ -115,6 +115,30 @@ export interface AnalysisResult {
   analysis: VideoAnalysis;
 }
 
+// ── ElevenLabs Music — composition plan (music_v1 "MusicPrompt" shape) ────────
+// Mirrors the /v1/music request body. Built by buildCompositionPlan() and sent
+// verbatim by ElevenMusicProvider. Field names match the API exactly.
+export interface MusicSection {
+  section_name: string;            // 1–100 chars
+  positive_local_styles: string[]; // musical directions to include for this section
+  negative_local_styles: string[]; // musical directions to avoid for this section
+  duration_ms: number;             // 3000–120000
+  lines: string[];                 // lyrics; empty array ⇒ instrumental
+}
+
+export interface CompositionPlan {
+  positive_global_styles: string[];
+  negative_global_styles: string[];
+  sections: MusicSection[];
+}
+
+// Human-friendly per-section summary returned to the client for display.
+export interface ScoreSection {
+  name: string;
+  durationSeconds: number;
+  styles: string[];
+}
+
 export interface GeneratedScore {
   audioUrl: string;
   durationSeconds: number;
@@ -125,6 +149,7 @@ export interface GeneratedScore {
   prompt: string;
   backendPrompt: string;
   instrumentSpec: InstrumentSpec;
+  sections?: ScoreSection[];       // populated by ElevenMusicProvider (composition-plan sections)
 }
 
 export type StemId = 'drums' | 'bass' | 'melody' | 'vocals';
