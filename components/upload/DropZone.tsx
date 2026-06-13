@@ -11,7 +11,6 @@ const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
 const MAX_BYTES = 100 * 1024 * 1024;
 
 export function DropZone({ onFileSelect }: DropZoneProps) {
-  const isUploading = false;
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -61,63 +60,54 @@ export function DropZone({ onFileSelect }: DropZoneProps) {
     <div className="space-y-3">
       <div
         role="button"
-        tabIndex={isUploading ? -1 : 0}
+        tabIndex={0}
         aria-label="Upload video file"
         className={cn(
-          'relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-8 py-16 text-center transition-all duration-200 cursor-pointer',
-          isDragging
-            ? 'border-[#ffcc18] bg-[#ffcc18]/5 scale-[1.01]'
-            : 'border-navy-700 hover:border-navy-600 hover:bg-navy-900/50',
-          isUploading && 'opacity-60 cursor-not-allowed pointer-events-none'
+          'flex flex-col items-center justify-center rounded-2xl border-2 border-dashed transition-all duration-200 cursor-pointer p-16 md:p-[80px]',
+          /* Light mode — exact from HTML */
+          'bg-[#efe3ca] border-[#d2c5ab]',
+          /* Light mode hover */
+          'hover:border-[#ffcc18] hover:bg-[#fcf6eb]',
+          /* Dark mode overrides */
+          'dark:bg-navy-900 dark:border-navy-700 dark:hover:border-navy-600 dark:hover:bg-navy-800',
+          isDragging && 'border-[#ffcc18] bg-[#ffcc18]/5 scale-[1.01]'
         )}
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
-        onClick={() => !isUploading && inputRef.current?.click()}
+        onClick={() => inputRef.current?.click()}
         onKeyDown={(e) => {
-          if ((e.key === 'Enter' || e.key === ' ') && !isUploading)
-            inputRef.current?.click();
+          if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click();
         }}
       >
         {/* Icon circle */}
-        <div
-          className={cn(
-            'mb-5 flex h-16 w-16 items-center justify-center rounded-full transition-colors',
-            isDragging ? 'bg-[#ffcc18]/20' : 'bg-navy-800'
-          )}
-        >
-          <svg
-            className={cn('h-8 w-8', isDragging ? 'text-[#ffcc18]' : 'text-cream-300')}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={1.5}
+        <div className={cn(
+          'flex h-20 w-20 items-center justify-center rounded-full mb-6',
+          isDragging ? 'bg-[#ffcc18]/30' : 'bg-[#ffcc18] dark:bg-navy-800'
+        )}>
+          <span
+            className={cn(
+              'material-symbols-outlined !text-4xl select-none',
+              isDragging ? 'text-[#ffcc18]' : 'text-[#6f5700] dark:text-cream-300'
+            )}
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M15.75 10.5l4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z"
-            />
-          </svg>
+            cloud_upload
+          </span>
         </div>
 
-        {isUploading ? (
-          <>
-            <div className="mb-2 flex items-center gap-2">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#ffcc18] border-t-transparent" />
-              <p className="text-base font-semibold text-cream-50">Uploading…</p>
-            </div>
-            <p className="text-sm text-cream-200">Please wait</p>
-          </>
-        ) : (
-          <>
-            <p className="mb-1.5 text-base font-semibold text-cream-50">
-              {isDragging ? 'Drop to upload' : 'Drop your video here'}
-            </p>
-            <p className="text-sm text-cream-200">or click to browse</p>
-            <p className="mt-3 text-xs text-cream-400">MP4 · MOV · WEBM &mdash; up to 100 MB</p>
-          </>
-        )}
+        <h3 className="text-2xl font-semibold text-[#1D2F45] dark:text-cream-50 mb-2">
+          {isDragging ? 'Drop to upload' : 'Drop your master edit here'}
+        </h3>
+        <p className="text-base text-[#7CA0CB] dark:text-cream-300 mb-8">
+          MP4, MOV, or ProRes up to 100 MB
+        </p>
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); inputRef.current?.click(); }}
+          className="bg-[#ffcc18] text-[#1d2f45] px-12 py-4 rounded-xl text-sm font-bold shadow-lg shadow-[#ffcc18]/20 hover:scale-[1.02] transition-transform"
+        >
+          Browse Files
+        </button>
 
         <input
           ref={inputRef}
@@ -125,24 +115,13 @@ export function DropZone({ onFileSelect }: DropZoneProps) {
           accept="video/mp4,video/quicktime,video/webm"
           className="sr-only"
           onChange={onInputChange}
-          disabled={isUploading}
         />
       </div>
 
       {validationError && (
         <div className="flex items-start gap-2 rounded-lg border border-red-800/50 bg-red-950/50 px-4 py-3">
-          <svg
-            className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-            />
+          <svg className="mt-0.5 h-4 w-4 flex-shrink-0 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <p className="text-sm text-red-400">{validationError}</p>
         </div>

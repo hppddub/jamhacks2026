@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import { DropZone } from '@/components/upload/DropZone';
 import { VideoPreview } from '@/components/upload/VideoPreview';
 import { AnalysisCard } from '@/components/analysis/AnalysisCard';
@@ -8,6 +9,7 @@ import { DownloadButton } from '@/components/player/DownloadButton';
 import { StemPlayer } from '@/components/player/StemPlayer';
 import { useWorkflow } from '@/hooks/useWorkflow';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { VideoScorePlayer } from '@/components/player/VideoScorePlayer';
 import { useRef } from 'react';
 import Image from 'next/image';
 
@@ -89,6 +91,7 @@ export default function Home() {
   const isLoading = isUploading || isAnalyzing || isGenerating;
 
   const currentOrder = STEP_ORDER[step] ?? -1;
+  const [scoreTab, setScoreTab] = useState<'score' | 'video'>('score');
 
   return (
     <div className="min-h-screen bg-navy-950 text-cream-50">
@@ -110,16 +113,6 @@ export default function Home() {
       </header>
 
       <main className="mx-auto max-w-3xl space-y-8 px-6 py-12">
-        {/* Hero — idle only */}
-        {step === 'idle' && (
-          <div className="animate-fade-in space-y-3 pb-4 text-center">
-            <h1 className="text-4xl font-bold tracking-tight">Score your video with AI</h1>
-            <p className="mx-auto max-w-xl leading-relaxed text-cream-200">
-              Upload any video and BananaMOV will analyze its mood, energy, and visual arc —
-              then generate a custom music score perfectly matched to every scene.
-            </p>
-          </div>
-        )}
 
         {/* Step indicator */}
         {step !== 'idle' && (
@@ -186,9 +179,79 @@ export default function Home() {
         )}
 
         {/* Upload section */}
-        <section className="space-y-4">
+        <section>
           {!videoFile && !isLoading ? (
-            <DropZone onFileSelect={selectFile} />
+            <div className="animate-fade-in">
+              {/* Hero — exact from HTML reference */}
+              <div className="text-center mb-16">
+                <h1 className="text-[48px] leading-[1.1] font-bold tracking-[-0.02em] text-[#7CA0CB] dark:text-cream-50 max-w-3xl mx-auto mb-4">
+                  Score your video with AI
+                </h1>
+                <p className="text-lg leading-relaxed text-[#1D2F45] dark:text-cream-200 max-w-2xl mx-auto mb-12">
+                  Intelligent energy analysis and mood mapping for cinematic audio synchronization.
+                  Transform your visual narrative with procedural scoring that breathes.
+                </p>
+                {/* Upload zone + decorative blobs */}
+                <div className="relative group">
+                  <DropZone onFileSelect={selectFile} />
+                  {/* Decorative blobs — light mode only */}
+                  <div className="dark:hidden absolute -z-10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[110%] h-[120%] opacity-20 pointer-events-none">
+                    <div className="absolute top-0 left-0 w-32 h-32 bg-[#745b00] rounded-full blur-3xl" />
+                    <div className="absolute bottom-0 right-0 w-48 h-48 bg-[#376a23] rounded-full blur-3xl" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Feature grid — exact from HTML reference */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                {/* Card 1 — Visual Arc Analysis */}
+                <div className="bento-card bg-white dark:bg-navy-900 border border-[#d2c5ab] dark:border-navy-700 p-8 rounded-2xl flex flex-col items-start h-full">
+                  <div className="w-12 h-12 bg-[#cfe1fe] dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-6">
+                    <span className="material-symbols-outlined text-[#4e6078] dark:text-blue-300">analytics</span>
+                  </div>
+                  <h4 className="text-2xl font-semibold text-[#1D2F45] dark:text-cream-50 mb-2">Visual Arc Analysis</h4>
+                  <p className="text-sm leading-relaxed text-[#7CA0CB] dark:text-cream-400 grow">
+                    Our AI maps the emotional intensity of every frame, creating a dynamic energy profile for your entire sequence as well as key climax points.
+                  </p>
+                  <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-[#ffeadd] dark:bg-navy-800">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img alt="Data Analytics" className="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBIT8OYFoMZ2hPbJ-iUZvPBWeajLUqhnoAfs4qlOUpLJ2h7D_gXpnxKdZbJxb0sy3X7iWva6Js9qpNzVZ9rrUi_OApWfxHT2B-zSBoEHf8zR2B1ERZv0kPXUQt-j9lqQauH4Nwj8d4n4KKCbG5nnmQgkEEUrZrETBlXGeaucPUzuQIJvtY1ZR_BsoSU6wTvL6N4_10TVOxVY9-M3J2P7VfCxW82fjO1X7qJqaN1FSmF-K8RmYwnLK_b4IFxvXw8KbYIedJx_Jph8qg" />
+                  </div>
+                </div>
+
+                {/* Card 2 — Procedural Scoring */}
+                <div className="bento-card bg-white dark:bg-navy-900 border border-[#d2c5ab] dark:border-navy-700 p-8 rounded-2xl flex flex-col items-start h-full">
+                  <div className="w-12 h-12 bg-[#a7e28b] dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-6">
+                    <span className="material-symbols-outlined text-[#376a23] dark:text-green-300">memory</span>
+                  </div>
+                  <h4 className="text-2xl font-semibold text-[#1D2F45] dark:text-cream-50 mb-2">Procedural Scoring</h4>
+                  <p className="text-sm leading-relaxed text-[#7CA0CB] dark:text-cream-400 grow">
+                    Generate unique, copyright-free musical compositions that evolve in real-time based on the pacing and cut-points of your video.
+                  </p>
+                  <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-[#ffeadd] dark:bg-navy-800">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img alt="Procedural Music" className="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDDHCWDaIlIcr345tKhbLWWbqh2xlHmk13E6jtinl2OqCNshOaXzC24vyVYpnvtQmg6-vWu8uhSQHoplStIbjN5HpXeSPjGcCHOnt-2fje_6iM3457immqX3Zi41kgZVv5_2dzicyJa_4iUtMKxUaez5XcuKNe2ZxU-HP5YqGVavRtAa0wqFtkdwHvdvKJJ-5UcFE8fOzzjXrw2cTwTApMIJ7MbR9YddVwk-nUbdkwWty9CAS2558Sp2scytZkrB5U3WHHtufg-b2M" />
+                  </div>
+                </div>
+
+                {/* Card 3 — Instant Sync */}
+                <div className="bento-card bg-white dark:bg-navy-900 border border-[#d2c5ab] dark:border-navy-700 p-8 rounded-2xl flex flex-col items-start h-full">
+                  <div className="w-12 h-12 bg-[#ffcc18] dark:bg-[#ffcc18]/20 rounded-xl flex items-center justify-center mb-6">
+                    <span className="material-symbols-outlined text-[#745b00] dark:text-[#ffcc18]">sync</span>
+                  </div>
+                  <h4 className="text-2xl font-semibold text-[#1D2F45] dark:text-cream-50 mb-2">Post Generation Editing</h4>
+                  <p className="text-sm leading-relaxed text-[#7CA0CB] dark:text-cream-400 grow">
+                    Export your synchronized project or just the generated soundtrack after editing it in our own studio to create the perfect, personalized score.
+                  </p>
+                  <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-[#ffeadd] dark:bg-navy-800">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img alt="Video Sync" className="w-full h-full object-cover opacity-80" src="https://lh3.googleusercontent.com/aida-public/AB6AXuA52cN4XKy7nF49wvsqDuTgvdqDBP9MIs6OCOAm9QezFayG_JAkDbRGvsAz05OVyJREJ1lZt2qC8lqfMaKkAsFlFPCMgPzWaIMc2dsQg8DIxLydLVvxXt65CgNTg2QxHdYLFAtyjHcbb6uaiooQJ8YCkEBnx4TMb6z88OEBk4jjUC1XhMc2uY-hOQEaaHSSmBzR-muiyh27LrhTM_WAJoSyhrFiWxvhc4OG8EmevIqZapkYtxAuvPRb-kyXofMzEYy0WzziKcCTCq0" />
+                  </div>
+                </div>
+
+              </div>
+            </div>
           ) : videoFile && videoObjectUrl ? (
             <div className="animate-fade-in">
               <VideoPreview
@@ -203,7 +266,7 @@ export default function Home() {
           ) : null}
 
           {step === 'idle' && videoFile && (
-            <div className="animate-fade-in">
+            <div className="animate-fade-in mt-4">
               <button
                 onClick={upload}
                 className="w-full rounded-xl bg-[#ffcc18] py-3 text-sm font-semibold text-navy-950 transition-all hover:bg-[#ffd84d] active:scale-[0.99]"
@@ -284,6 +347,37 @@ export default function Home() {
               )}
             </div>
 
+            {/* Tab switcher */}
+            <div className="flex rounded-lg border border-navy-700 bg-navy-900 p-1">
+              <button
+                onClick={() => setScoreTab('score')}
+                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                  scoreTab === 'score'
+                    ? 'bg-[#ffcc18] text-navy-950'
+                    : 'text-cream-300 hover:text-cream-100'
+                }`}
+              >
+                Score Only
+              </button>
+              <button
+                onClick={() => setScoreTab('video')}
+                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
+                  scoreTab === 'video'
+                    ? 'bg-[#ffcc18] text-navy-950'
+                    : 'text-cream-300 hover:text-cream-100'
+                }`}
+              >
+                Score + Video
+              </button>
+            </div>
+
+            {scoreTab === 'score' ? (
+              <AudioPlayer src={score.audioUrl} />
+            ) : (
+              videoObjectUrl && (
+                <VideoScorePlayer videoUrl={videoObjectUrl} audioSrc={score.audioUrl} />
+              )
+            )}
             <ScoreOutput
               score={score}
               videoSrc={videoObjectUrl ?? ''}
