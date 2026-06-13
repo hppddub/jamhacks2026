@@ -34,6 +34,13 @@ export interface TimelineSegment {
   label: string;
 }
 
+export type ColorPalette = 'warm' | 'cool' | 'dark' | 'bright' | 'neutral';
+export type CameraStyle = 'static' | 'smooth' | 'handheld' | 'dynamic';
+export type VisualPace = 'slow-cuts' | 'moderate-cuts' | 'fast-cuts';
+export type SettingType = 'nature' | 'urban' | 'intimate' | 'cinematic' | 'abstract' | 'sports' | 'documentary';
+export type AudioEnergyLevel = 'silent' | 'quiet' | 'moderate' | 'loud';
+export type MusicRole = 'background-underscore' | 'featured-score' | 'sync-to-action' | 'ambient-complement';
+
 export interface VideoAnalysis {
   mood: Mood;
   energyLevel: EnergyLevel;
@@ -45,6 +52,19 @@ export interface VideoAnalysis {
   instrumentSuggestions: string[];
   analysisSummary: string;
   timeline: TimelineSegment[];
+  colorPalette?: ColorPalette;
+  cameraStyle?: CameraStyle;
+  visualPace?: VisualPace;
+  settingType?: SettingType;
+  emotionalArc?: string;
+  sonicTexture?: string;
+  musicalRecommendation?: string;
+  keyMode?: 'major' | 'minor' | 'modal';
+  rhythmicFeel?: string;
+  dynamicArc?: string;
+  existingAudio?: string;
+  audioEnergyLevel?: AudioEnergyLevel;
+  musicRole?: MusicRole;
 }
 
 export interface AnalysisResult {

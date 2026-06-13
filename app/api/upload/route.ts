@@ -43,10 +43,18 @@ export async function POST(request: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     fs.writeFileSync(fullPath, buffer);
 
+    const rawDuration = formData.get('durationSeconds');
+    const durationSeconds = rawDuration !== null ? parseFloat(String(rawDuration)) : undefined;
+    const validDuration =
+      typeof durationSeconds === 'number' && Number.isFinite(durationSeconds) && durationSeconds > 0
+        ? durationSeconds
+        : undefined;
+
     return NextResponse.json({
       videoPath: fullPath,
       filename: file.name,
       sizeBytes: file.size,
+      durationSeconds: validDuration,
     });
   } catch (error) {
     console.error('[/api/upload]', error);
