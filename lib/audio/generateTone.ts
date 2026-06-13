@@ -7,11 +7,6 @@ interface LameMp3Encoder {
   flush(): Int8Array;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const lamejs = require('lamejs') as {
-  Mp3Encoder: new (channels: number, sampleRate: number, kbps: number) => LameMp3Encoder;
-};
-
 const SAMPLE_RATE = 44100;
 const CHANNELS = 1;
 const BITRATE = 128;
@@ -40,6 +35,31 @@ const CHORD_PROGRESSION = [
   [1.0, 1.25, 1.5],     // I  return
 ];
 
+// Encodes a mono Int16Array of PCM samples (44100 Hz) to an MP3 Buffer via lamejs.
+export function encodePcmToMp3(pcm: Int16Array): Buffer {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const lamejs = require('lamejs') as {
+    Mp3Encoder: new (channels: number, sampleRate: number, kbps: number) => LameMp3Encoder;
+  };
+  const encoder = new lamejs.Mp3Encoder(CHANNELS, SAMPLE_RATE, BITRATE);
+  const chunks: Int8Array[] = [];
+
+  for (let i = 0; i < pcm.length; i += CHUNK_SIZE) {
+    const chunk = pcm.subarray(i, Math.min(i + CHUNK_SIZE, pcm.length));
+    const mp3buf = encoder.encodeBuffer(chunk);
+    if (mp3buf.length > 0) chunks.push(mp3buf);
+  }
+
+  const flushed = encoder.flush();
+  if (flushed.length > 0) chunks.push(flushed);
+
+  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
+  const buffer = Buffer.allocUnsafe(totalLen);
+  let offset = 0;
+  for (const chunk of chunks) { buffer.set(chunk, offset); offset += chunk.length; }
+  return buffer;
+}
+
 export function generateMp3(analysis: VideoAnalysis, outputPath: string, targetDurationSeconds?: number): number {
   const rootFreq = MOOD_ROOT_FREQ[analysis.mood] ?? 261.63;
   const baseDuration = ENERGY_DURATION[analysis.energyLevel] ?? 18;
@@ -60,7 +80,6 @@ export function generateMp3(analysis: VideoAnalysis, outputPath: string, targetD
     const chord = CHORD_PROGRESSION[barIndex];
     const posInBar = (i % barSamples) / barSamples;
 
-    // Per-bar envelope: short attack, sustain, brief release before next bar
     let env: number;
     if (posInBar < 0.02) {
       env = posInBar / 0.02;
@@ -70,14 +89,12 @@ export function generateMp3(analysis: VideoAnalysis, outputPath: string, targetD
       env = 1.0;
     }
 
-    // Sum sine waves for each chord note, then normalise
     let sample = 0;
     for (const ratio of chord) {
       sample += Math.sin(2 * Math.PI * rootFreq * ratio * t);
     }
     sample = (sample / chord.length) * env * amplitude;
 
-    // Light noise texture at high energy
     if (analysis.energyLevel === 'high') {
       sample += (Math.random() - 0.5) * 0.015;
     }
@@ -85,27 +102,7 @@ export function generateMp3(analysis: VideoAnalysis, outputPath: string, targetD
     pcm[i] = Math.round(Math.max(-1, Math.min(1, sample)) * 32767);
   }
 
-  // Encode PCM → MP3 via lamejs
-  const encoder = new lamejs.Mp3Encoder(CHANNELS, SAMPLE_RATE, BITRATE);
-  const chunks: Int8Array[] = [];
-
-  for (let i = 0; i < pcm.length; i += CHUNK_SIZE) {
-    const chunk = pcm.subarray(i, Math.min(i + CHUNK_SIZE, pcm.length));
-    const mp3buf = encoder.encodeBuffer(chunk);
-    if (mp3buf.length > 0) chunks.push(mp3buf);
-  }
-
-  const flushed = encoder.flush();
-  if (flushed.length > 0) chunks.push(flushed);
-
-  const totalLen = chunks.reduce((s, c) => s + c.length, 0);
-  const buffer = Buffer.allocUnsafe(totalLen);
-  let offset = 0;
-  for (const chunk of chunks) {
-    buffer.set(chunk, offset);
-    offset += chunk.length;
-  }
-
+  const buffer = encodePcmToMp3(pcm);
   fs.mkdirSync(path.dirname(outputPath), { recursive: true });
   fs.writeFileSync(outputPath, buffer);
 
