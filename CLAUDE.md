@@ -7,7 +7,7 @@ This file is the persistent technical memory for Claude Code working on this pro
 ## Project Identity
 
 **Name:** BananaMOV
-**Purpose:** AI-powered video scoring platform — upload a video, analyze its visual arc across the timeline, generate a matching music score via ElevenLabs.
+**Purpose:** AI-powered video scoring platform — upload a video, analyze its visual and audio arc across the timeline, generate a matching music score via ElevenLabs.
 **Context:** Built for JamHacks 2026. ElevenLabs is a track prize sponsor — ElevenLabs Sound Generation is the required production music API.
 **Status:** MVP complete. All phases implemented and building.
 - **Analysis is always real Gemini.** `getAnalysisProvider()` is hardcoded to return `new GeminiAnalyzer()`; it no longer reads `ANALYSIS_PROVIDER` and does not fall back to `MockAnalyzer`. A valid `GEMINI_API_KEY` is therefore **required** to run the analyze step. `MockAnalyzer` is still fully maintained but is currently **unreferenced by the factory** (kept for offline/dev use and as a reference implementation).
@@ -285,14 +285,21 @@ const MIME_MAP: Record<string, string> = {
 Extension derived from `metadata.filename`, defaults to `'video/mp4'` if unknown.
 
 ### Analysis prompt
-The static `ANALYSIS_PROMPT` constant defines a detailed JSON schema. It now requests a **much richer** result than the original spec — in addition to the core fields it asks the model to *listen* to the audio track and reason about how the score should coexist with it. Required keys:
-- **Core:** `videoDurationSeconds`, `mood`, `energyLevel`, `pace`, `bpm`, `genre`, `sceneCount`, `motionScore`, `instrumentSuggestions`, `analysisSummary`
-- **Visual descriptors:** `colorPalette` (`warm|cool|dark|bright|neutral`), `cameraStyle` (`static|smooth|handheld|dynamic`), `visualPace` (`slow-cuts|moderate-cuts|fast-cuts`), `settingType` (`nature|urban|intimate|cinematic|abstract|sports|documentary`)
-- **Musical brief (sound-only, no visual language):** `emotionalArc`, `sonicTexture`, `musicalRecommendation`, `keyMode` (`major|minor|modal`), `rhythmicFeel`, `dynamicArc`. The prompt explicitly instructs the model to describe *only how the music sounds* in `sonicTexture`/`musicalRecommendation` (so they can be fed to ElevenLabs without leaking visual descriptions).
-- **Existing-audio analysis:** `existingAudio` (8–15 words describing what is actually audible, or "no audible sound"), `audioEnergyLevel` (`silent|quiet|moderate|loud`), `musicRole` (`background-underscore|featured-score|sync-to-action|ambient-complement` — chosen based on how prominent the existing audio is)
-- `timeline`: array of 3–5 segments, each with `startSeconds`, `endSeconds`, `mood`, `energyLevel`, `label`; segments must span 0 → `videoDurationSeconds` with no gaps
+The static `ANALYSIS_PROMPT` constant defines a detailed JSON schema requiring:
+- `videoDurationSeconds`, `mood`, `energyLevel`, `pace`, `bpm`, `genre`, `sceneCount`, `motionScore`, `instrumentSuggestions`, `analysisSummary`
+- Visual fields: `colorPalette`, `cameraStyle`, `visualPace`, `settingType`, `emotionalArc`, `sonicTexture`, `musicalRecommendation`, `keyMode`, `rhythmicFeel`, `dynamicArc`
+- Audio fields: `existingAudio`, `audioEnergyLevel`, `musicRole`, `audioContentTypes`, `dialogueTone` (dialogue only), `dialogueSentiment` (dialogue only), `soundTexture`, `volumeDynamics`, `audioSummary`
+- `timeline`: array of 3–5 segments, each with `startSeconds`, `endSeconds`, `mood`, `energyLevel`, `label`, `audioNote`
 - BPM guidance: low energy → 60-90, medium → 90-120, high → 120-160
-- Model: `gemini-2.5-flash`, invoked via `createUserContent([createPartFromUri(fileUri, fileMimeType), ANALYSIS_PROMPT])`
+- Model: `gemini-2.5-flash`
+
+**Audio analysis rules in the prompt:**
+- `audioContentTypes`: identify ALL types present — `dialogue`, `sound_effects`, `background_music`, `ambient`, `silence`
+- `dialogueTone` / `dialogueSentiment`: only populated when dialogue is audible; omitted otherwise
+- `soundTexture`: character of transient audio events — `sharp` (sudden high-freq transients), `blunt` (heavy low-freq), `soft` (gentle), `layered` (many simultaneous sources), `sparse` (isolated with silence)
+- `volumeDynamics`: how overall audio level moves — `consistent`, `building`, `dropping`, `erratic`, `dynamic`
+- `audioSummary`: 1-sentence synthesis of all audio observations
+- `audioNote` per segment: 5–10 words on dominant audio event in that time window
 
 ### Retry logic (`generateWithRetry`)
 - Up to 4 attempts
@@ -301,19 +308,16 @@ The static `ANALYSIS_PROMPT` constant defines a detailed JSON schema. It now req
 - Non-transient errors throw immediately on first occurrence
 
 ### Response parsing
-- `extractJson(raw)`: strips markdown code fences (` ```json ... ``` ` or ` ``` ... ``` `) before `JSON.parse`; throws `"Gemini returned an invalid JSON response. Raw: ..."` (first 200 chars) on parse failure.
-- Guard functions with safe fallbacks, each backed by a `VALID_*` allow-list:
-  - Required, fall back to a default: `toMood` (`'emotional'`), `toEnergy` (`'medium'`), `toPace` (`'moderate'`), `toGenre` (`'cinematic'`), `toNumber` (provided), `toStringArray` (`[]`)
-  - Optional, fall back to `undefined`: `toColorPalette`, `toCameraStyle`, `toVisualPace`, `toSettingType`, `toAudioEnergyLevel`, `toMusicRole`
-  - Free-text optionals (`emotionalArc`, `sonicTexture`, `musicalRecommendation`, `rhythmicFeel`, `dynamicArc`, `existingAudio`) are kept only if they are non-empty strings, else `undefined`. `keyMode` is kept only if it is one of `major|minor|modal`.
-- `mood`/`energyLevel` fall back to the **peak timeline segment** when absent: `toMood(parsed.mood ?? peak.mood)`, `toEnergy(parsed.energyLevel ?? peak.energyLevel)` (peak = highest-energy segment).
-- `videoDurationSeconds` from parsed JSON is stored back into `metadata.durationSeconds` (fallback to existing `metadata.durationSeconds ?? 30`).
+- `extractJson(raw)`: strips markdown code fences (` ```json ... ``` ` or ` ``` ... ``` `) before `JSON.parse`
+- Guard functions with safe fallbacks: `toMood` (fallback: `'emotional'`), `toEnergy` (fallback: `'medium'`), `toPace` (fallback: `'moderate'`), `toGenre` (fallback: `'cinematic'`), `toNumber` (fallback: provided), `toStringArray` (fallback: `[]`)
+- Audio guard functions (return `undefined` on invalid): `toAudioEnergyLevel`, `toMusicRole`, `toAudioContentTypes` (returns `[]` on invalid), `toDialogueTone`, `toDialogueSentiment`, `toSoundTexture`, `toVolumeDynamics`
+- `audioDialogueDominant` is derived: `true` when `audioContentTypes` includes `'dialogue'` AND `audioEnergyLevel !== 'silent'`
+- `videoDurationSeconds` from parsed JSON is stored back into `metadata.durationSeconds`
 - BPM clamped: `Math.round(Math.min(160, Math.max(60, toNumber(parsed.bpm, 100))))`
 - `sceneCount`: `Math.round(Math.max(1, toNumber(parsed.sceneCount, 5)))`
 - MotionScore clamped: `Math.round(Math.min(1, Math.max(0, toNumber(parsed.motionScore, 0.5))) * 100) / 100`
-- `instrumentSuggestions` sliced to 4.
-- `analysisSummary` falls back to `` `A ${energy}-energy ${mood} video.` `` when missing.
-- Timeline (`parseTimeline`) sorted by `startSeconds`, then `segments[0].startSeconds = 0` and `segments[last].endSeconds = totalDuration` forced. Each segment's `label` defaults to `` `${Opening|Mid|Resolution} — ${mood}, ${energy} energy` `` when the model omits one.
+- Timeline sorted by `startSeconds`, then `segments[0].startSeconds = 0` and `segments[last].endSeconds = totalDuration` forced
+- Each timeline segment now includes optional `audioNote` parsed from the response
 
 ### Timeline fallback
 If `raw.timeline` is not an array or has fewer than 2 entries, `fallbackTimeline(duration)` returns 3 equal-width (`duration/3`) segments: `calm/low` (Opening) → `emotional/medium` (Mid) → `inspirational/high` (Resolution).
@@ -386,45 +390,65 @@ Two exported functions. Both `MockMusicProvider` and `ElevenLabsProvider` import
 
 ### `buildPrompt(result: AnalysisResult): string`
 
-Pure function. Budget: **`MAX_CHARS = 450`**.
+Pure function. Constructs a natural language description of the desired music. Max 450 characters assembled via `assemble()` which skips parts that would exceed the budget rather than truncating.
 
-**Visual-leak guard.** A regex `VISUAL_LEAK = /\b(video|scene|shot|frame|footage|depicts|shows|we see|camera|figure|person|man|woman|people|viewer)\b/i` rejects any model-supplied free-text field that describes the picture instead of the music. Fields failing this test are dropped.
+**Two paths:**
+- **Path A** (preferred): when Gemini returns a clean `musicalRecommendation` with no visual leakage, it is used as the centrepiece
+- **Path B** (fallback): translates visual properties (`sonicTexture`, `settingType`, `colorPalette`) into sonic descriptors
 
-**Core clause (always first):** `` `${GenreLabel} score, ${bpm} BPM, ${energyLevel} energy${keyMode ? ', '+keyMode+' key' : ''}.` ``
+**Audio context modifier** — derived from new audio fields and inserted after `roleStr` in both paths:
+- `audioDialogueDominant === true` → adds `"understated — must not compete with spoken word"`
+- `soundTexture === 'sharp'` → adds `"leave space for sharp audio transients"`
+- `soundTexture === 'layered'` → adds `"blend into a dense, layered audio environment"`
+- `soundTexture === 'sparse'` → adds `"minimal texture — sparse audio environment"`
+- `volumeDynamics === 'building'` → adds `"mirror the building volume arc"`
+- `volumeDynamics === 'erratic'` → adds `"maintain steady underscoring through erratic audio changes"`
+- `volumeDynamics === 'dropping'` → adds `"gently fade alongside the dropping audio energy"`
 
-**`musicRole` descriptor** (`MUSIC_ROLE_DESCRIPTOR` map), appended when present:
-| musicRole | Descriptor |
-|---|---|
-| `background-underscore` | "Composed as a subtle background underscore — restrained, supportive." |
-| `featured-score` | "Composed as a featured score — full presence, emotionally centred." |
-| `sync-to-action` | "Composed to sync with action beats — rhythmically tight, punchy hits." |
-| `ambient-complement` | "Composed as ambient complement — airy, unobtrusive, blends with natural sound." |
-
-**Two assembly paths:**
-- **Path A — Gemini gave a clean `musicalRecommendation`** (present and passes `VISUAL_LEAK`): use it as the centrepiece. Arc = `emotionalArc` if clean, else a `timeline`-derived `"opens {mood}, builds {mood}, resolves {mood}"`. Parts: `[core, roleStr, musicalRecommendation, "Arc: {arc}.", "Features {instruments}.", closing]`. (`rhythmicFeel`/`dynamicArc` are intentionally **excluded** here — the recommendation already carries that detail and budget is tight.)
-- **Path B — fallback:** translate visual props into sonic descriptors. `Texture:` is built from `sonicTexture` (if clean) + `SETTING_SONIC[settingType]` + `PALETTE_SONIC[colorPalette]`. `extraStr` adds clean `rhythmicFeel`/`dynamicArc`. Arc clauses: `"begins {energy}-energy {mood}"`, `"builds to {energy}-energy {mood}"`, `"resolves {mood}"`. Parts: `[core, roleStr, sonic, extraStr, shape, "Features {instruments}.", closing]`.
-
-`SETTING_SONIC` (e.g. `nature → "acoustic, natural reverb, open space"`, `urban → "electronic, dry urban texture"`, `cinematic → "orchestral, spacious hall reverb"`, …) and `PALETTE_SONIC` (e.g. `warm → "warm, lush tones"`, `cool → "cool, crystalline tones"`, …) provide the fallback sonic shorthand.
-
-`MOOD_CLOSING` map (note: shorter than the original spec's `MOOD_CLOSINGS`; default `"Evocative and resonant."`):
-| Mood | Closing |
-|---|---|
-| `dramatic` | "Powerful and cinematic." |
-| `calm` | "Peaceful and serene." |
-| `energetic` | "Driving and propulsive." |
-| `emotional` | "Tender and moving." |
-| `inspirational` | "Uplifting and hopeful." |
-| `suspenseful` | "Tense and anticipatory." |
-| `corporate` | "Polished and confident." |
-| `happy` | "Bright and optimistic." |
-
-`instruments` = `instrumentSuggestions.slice(0, 3).join(', ')`.
-
-**`assemble(parts)`** joins the non-empty parts in order, **skipping** (not breaking on) any part that would push the running total past `MAX_CHARS` — so a single oversized middle part can't discard everything after it.
+`MUSIC_ROLE_DESCRIPTOR` map drives the `roleStr` (inserted before audio context):
+- `background-underscore` → "Composed as a subtle background underscore — restrained, supportive."
+- `featured-score` → "Composed as a featured score — full presence, emotionally centred."
+- `sync-to-action` → "Composed to sync with action beats — rhythmically tight, punchy hits."
+- `ambient-complement` → "Composed as ambient complement — airy, unobtrusive, blends with natural sound."
 
 ### `buildTags(result: AnalysisResult): string[]`
 
-Unchanged. Returns up to 10 tags: `[mood, genre, "{energy} energy", "{pace} pace", ...instrumentSuggestions.slice(0, 3)]`. **Currently unused** by either provider (the raw `fetch` body sends only `text`/`prompt_influence`/`duration_seconds`), but kept for future tag-based requests.
+Returns up to 10 tags: `[mood, genre, "{energy} energy", "{pace} pace", ...instrumentSuggestions.slice(0, 3)]`. Intended for ElevenLabs tag fields (API allows max 10).
+
+---
+
+## Audio Analysis Type System
+
+New types added to `types/index.ts` as part of the audio characterization feature:
+
+```ts
+export type AudioContentType = 'dialogue' | 'sound_effects' | 'background_music' | 'ambient' | 'silence';
+export type DialogueTone     = 'formal' | 'casual' | 'emotional' | 'tense' | 'upbeat';
+export type DialogueSentiment = 'positive' | 'neutral' | 'negative' | 'mixed';
+export type SoundTexture     = 'sharp' | 'blunt' | 'soft' | 'layered' | 'sparse';
+export type VolumeDynamics   = 'consistent' | 'building' | 'dropping' | 'erratic' | 'dynamic';
+```
+
+`TimelineSegment` extended with:
+```ts
+audioNote?: string;   // 5-10 word descriptor of dominant audio activity in this segment
+```
+
+`VideoAnalysis` extended with:
+```ts
+audioContentTypes?:    AudioContentType[];  // all audio types present in the video
+dialogueTone?:         DialogueTone;        // only set when dialogue is audible
+dialogueSentiment?:    DialogueSentiment;   // only set when dialogue is audible
+soundTexture?:         SoundTexture;        // character of transient/non-music audio events
+volumeDynamics?:       VolumeDynamics;      // how overall audio volume moves across the video
+audioSummary?:         string;              // 1-sentence synthesis of all audio observations
+audioDialogueDominant?: boolean;           // true when dialogue is present and audio is not silent
+```
+
+**Semantic rules:**
+- `dialogueTone` and `dialogueSentiment` are always `undefined` when `audioContentTypes` does not include `'dialogue'`
+- `audioDialogueDominant` is derived (not directly set by Gemini): `audioContentTypes.includes('dialogue') && audioEnergyLevel !== 'silent'`
+- These fields are all optional — components and `buildPrompt` must guard against `undefined`
 
 ---
 
@@ -476,17 +500,17 @@ Energy indices: 0=low, 1=medium, 2=high.
 "This {pace} {peak.mood} video has {peak.energyLevel} peak energy with approximately {sceneCount} scene cuts, suggesting a {genre} score around {bpm} BPM featuring {instr[0]} and {instr[1]}."
 ```
 
-**Expanded fields (also seeded, to mirror `GeminiAnalyzer`):**
-- `colorPalette`, `cameraStyle`, `visualPace`, `settingType` — seeded picks from their allow-lists.
-- `emotionalArc` — template referencing `timeline[0].mood`, peak mood, last segment mood.
-- `sonicTexture`, `rhythmicFeel`, `dynamicArc` — seeded picks from fixed phrase pools.
-- `musicalRecommendation` — template naming top-2 instruments, bpm, peak energy/mood, and the arc endpoints.
-- `keyMode` — derived from peak mood: `minor` for `dramatic|suspenseful|emotional`, `modal` for `calm|corporate`, else `major`.
-- `existingAudio` — seeded pick from `EXISTING_AUDIO_DESCRIPTIONS` (8 phrases incl. "no audible sound").
-- `audioEnergyLevel` — seeded pick from `silent|quiet|moderate|loud`.
-- `musicRole` — **derived from `audioEnergyLevel`** for consistency: `loud → background-underscore`, `silent → featured-score`, `moderate → pick(sync-to-action | ambient-complement)`, else `ambient-complement`.
+**Audio fields (all seeded):**
+- `audioContentTypes`: picked from 10 preset combinations (e.g. `['dialogue', 'background_music']`, `['sound_effects', 'ambient']`, `['silence']`)
+- `dialogueTone` / `dialogueSentiment`: only set when `dialogue` is in `audioContentTypes` AND `audioEnergyLevel !== 'silent'`; picked from pools of 5 and 4 values respectively
+- `soundTexture`: picked from `['sharp', 'blunt', 'soft', 'layered', 'sparse']`
+- `volumeDynamics`: picked from `['consistent', 'building', 'dropping', 'erratic', 'dynamic']`
+- `audioDialogueDominant`: `true` only when dialogue is the sole content type and energy is not silent
+- `audioSummary`: constructed from the above — tone of dialogue if present, otherwise texture/dynamics description
+- `musicRole`: derived from `audioEnergyLevel` (loud→`background-underscore`, silent→`featured-score`, moderate→random of sync-to-action/ambient-complement, quiet→`ambient-complement`)
+- Each `TimelineSegment` now includes `audioNote`: picked from a pool of 10 descriptive strings
 
-**Delay:** `delay(2000 + Math.random() * 1000)` (2–3 seconds; uses `Math.random()`, not seeded), applied at the **start** of `analyze()`.
+**Delay:** `delay(2000 + Math.random() * 1000)` (2–3 seconds; uses `Math.random()`, not seeded)
 
 ### MockMusicProvider (`lib/providers/music/MockMusicProvider.ts`)
 
@@ -633,23 +657,25 @@ export async function POST(request: Request) {
 - "Remove" button calls `onRemove`; disabled + opacity-40 when `disabled === true`
 
 ### AnalysisCard
-- Accepts `{ result: AnalysisResult }` (reads `result.analysis`)
-- BPM is `text-4xl font-bold tabular-nums text-[#ffcc18]` in the top-right
-- **Mood badge colors** now use the brand hex palette (with `dark:` overrides on some), via the `MOOD_BADGE` map — each badge is a tinted `bg-…/10 text-… border-…/20`:
-  - `inspirational` & `corporate`: `#7CA0CB` (slate-blue)
-  - `emotional` & `suspenseful`: `#6EA556` (green)
-  - `dramatic`: `#B28B52` (bronze) → `dark:#fdf3ab` (pale yellow)
-  - `energetic`: `#ffcc18` (banana)
-  - `happy`: `#B28B52` → `dark:` yellow-500
-  - `calm`: green-500
-  - Fallback (unknown mood): `bg-navy-800 text-cream-100 border-navy-700`
-- Energy badge (`ENERGY_BADGE`): low = green-500 tint; medium = `#B28B52` → `dark:` yellow-500; high = `#B28B52` → `dark:#fdf3ab`
-- Pace badge: `#7CA0CB` tint (always)
-- Genre badge: `bg-navy-800 text-cream-100 border-navy-700` (neutral)
-- 2-column stats grid: "Est. Scene Cuts" + "Motion Score" (`#ffcc18` progress bar over `bg-navy-700`, 0–100%)
-- Instrument suggestions as `bg-navy-800 border-navy-700 text-cream-100` tags (not shadcn `Badge` — a local `Badge` helper is used for the attribute pills)
-- `analysisSummary` italic `text-cream-200` below a `border-t border-navy-800`
-- `<TimelineBar>` below a second `border-t border-navy-800`
+- Accepts `{ result: AnalysisResult }`
+- BPM is `text-4xl font-bold text-amber-500` in the top-right
+- **Mood badge colors** (each mood has a unique color — do not default to a single color):
+  - `inspirational`: sky, `emotional`: violet, `dramatic`: red, `energetic`: orange
+  - `suspenseful`: purple, `corporate`: blue, `happy`: yellow, `calm`: green
+- Energy badge: green=low, yellow=medium, red=high
+- Pace badge: blue (always)
+- Genre badge: zinc-800/300 (neutral, no color)
+- 2-column stats grid: "Est. Scene Cuts" + "Motion Score" (amber progress bar, 0–100%)
+- Instrument suggestions as zinc-800 bordered tags (not shadcn `Badge`)
+- `analysisSummary` italic text below a `border-t`
+- **Audio Profile section** (conditionally rendered when any audio field is present), below `analysisSummary`:
+  - `audioContentTypes` as colored badges (`AUDIO_TYPE_BADGE` map): dialogue=teal, sound_effects=orange, background_music=purple, ambient=green, silence=muted
+  - `soundTexture` badge: orange-tinted
+  - `volumeDynamics` badge: purple-tinted
+  - `dialogueTone` badge: teal-tinted (only when dialogue is present)
+  - `dialogueSentiment` badge: sky-tinted (only when dialogue is present)
+  - `audioSummary` italic text
+- `<TimelineBar>` below a final `border-t`
 
 ### TimelineBar
 - Accepts `{ segments: TimelineSegment[] }`
