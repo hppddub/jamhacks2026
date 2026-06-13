@@ -1,5 +1,9 @@
+'use client';
+
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { TimelineBar } from './TimelineBar';
+import { MicroScorePanel } from './MicroScorePanel';
 import type { AnalysisResult } from '@/types';
 
 interface AnalysisCardProps {
@@ -47,6 +51,11 @@ function Badge({ label, className }: { label: string; className?: string }) {
 export function AnalysisCard({ result }: AnalysisCardProps) {
   const analysis = result.analysis;
   const motionPct = Math.round(analysis.motionScore * 100);
+  const [selectedSegment, setSelectedSegment] = useState<number | null>(null);
+
+  const handleSegmentClick = (i: number) => {
+    setSelectedSegment(prev => (prev === i ? null : i));
+  };
 
   return (
     <div className="animate-fade-in space-y-5 rounded-xl border border-navy-700 bg-navy-900 p-6">
@@ -179,8 +188,20 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
 
       {/* Timeline arc */}
       <div className="border-t border-navy-800 pt-4">
-        <TimelineBar segments={analysis.timeline} />
+        <TimelineBar
+          segments={analysis.timeline}
+          selectedIndex={selectedSegment ?? undefined}
+          onSegmentClick={handleSegmentClick}
+        />
       </div>
+
+      {/* Micro-score panel for selected segment */}
+      {selectedSegment !== null && analysis.timeline[selectedSegment]?.microScores && (
+        <MicroScorePanel
+          scores={analysis.timeline[selectedSegment].microScores!}
+          label={analysis.timeline[selectedSegment].label}
+        />
+      )}
     </div>
   );
 }

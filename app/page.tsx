@@ -8,6 +8,8 @@ import { DownloadButton } from '@/components/player/DownloadButton';
 import { StemPlayer } from '@/components/player/StemPlayer';
 import { useWorkflow } from '@/hooks/useWorkflow';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { useRef } from 'react';
+import Image from 'next/image';
 
 function Spinner({ label }: { label: string }) {
   return (
@@ -78,6 +80,7 @@ const STEP_ORDER: Record<string, number> = {
 
 export default function Home() {
   const { state, selectFile, removeFile, upload, analyze, generate, separateStems, reset } = useWorkflow();
+  const videoRef = useRef<HTMLVideoElement>(null);
   const { step, videoFile, videoObjectUrl, originalAudioUrl, analysis, score, error, stemStep, stems, stemError } = state;
 
   const isUploading = step === 'uploading';
@@ -93,7 +96,7 @@ export default function Home() {
       <header className="sticky top-0 z-10 border-b border-navy-800 bg-navy-950/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <img src="/banana-logo.svg" alt="BananaMOV logo" className="h-8 w-8" />
+            <Image src="/banana-logo.svg" alt="BananaMOV logo" width={32} height={32} />
             <span className="text-lg font-bold tracking-tight">BananaMOV</span>
           </div>
           <div className="flex items-center gap-3">
@@ -193,6 +196,8 @@ export default function Home() {
                 objectUrl={videoObjectUrl}
                 onRemove={removeFile}
                 disabled={isLoading}
+                videoRef={videoRef}
+                hideControls={step === 'completed'}
               />
             </div>
           ) : null}

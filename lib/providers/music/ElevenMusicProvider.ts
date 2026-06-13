@@ -94,6 +94,8 @@ export class ElevenMusicProvider implements MusicGenerationProvider {
       mood: analysis.mood,
       filename: `score-${analysis.mood}-${analysis.bpm}bpm.mp3`,
       prompt,
+      backendPrompt: JSON.stringify(plan),
+      instrumentSpec: { drums: [], bass: [], vocals: [], melody: analysis.instrumentSuggestions },
       sections,
     };
   }
