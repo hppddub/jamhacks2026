@@ -65,12 +65,12 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
   );
 
   return (
-    <div className="animate-fade-in space-y-4 rounded-xl border border-zinc-700 bg-zinc-900 p-6">
+    <div className="animate-fade-in space-y-4 rounded-xl border border-navy-700 bg-navy-900 p-6">
       <div className="flex items-center gap-2">
-        <div className="h-2 w-2 animate-pulse rounded-full bg-amber-500" />
-        <p className="text-sm font-medium text-zinc-300">Generated Score</p>
+        <div className="h-2 w-2 animate-pulse rounded-full bg-[#ffcc18]" />
+        <p className="text-sm font-medium text-cream-100">Generated Score</p>
         {!isLoaded && (
-          <span className="ml-auto text-xs text-zinc-600">Loading audio…</span>
+          <span className="ml-auto text-xs text-cream-400">Loading audio…</span>
         )}
       </div>
 
@@ -84,7 +84,7 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
             <div
               key={i}
               className={`w-1 rounded-full transition-colors duration-150 ${
-                filled ? 'bg-amber-500' : 'bg-zinc-700'
+                filled ? 'bg-[#ffcc18]' : 'bg-navy-700'
               }`}
               style={{ height: `${h}px` }}
             />
@@ -105,13 +105,13 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
         className="w-full cursor-pointer appearance-none rounded-full
           [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-3
           [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:rounded-full
-          [&::-webkit-slider-thumb]:bg-amber-500 [&::-webkit-slider-thumb]:cursor-pointer
+          [&::-webkit-slider-thumb]:bg-[#ffcc18] [&::-webkit-slider-thumb]:cursor-pointer
           [&::-moz-range-thumb]:h-3 [&::-moz-range-thumb]:w-3
-          [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-amber-500
+          [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:bg-[#ffcc18]
           [&::-moz-range-thumb]:border-0 disabled:cursor-not-allowed"
         style={{
           height: '4px',
-          background: `linear-gradient(to right, #f59e0b ${progress}%, #3f3f46 ${progress}%)`,
+          background: `linear-gradient(to right, #ffcc18 ${progress}%, #2D4B6E ${progress}%)`,
         }}
       />
 
@@ -121,7 +121,7 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
           onClick={togglePlay}
           disabled={!isLoaded}
           aria-label={isPlaying ? 'Pause' : 'Play'}
-          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-amber-500 text-zinc-950 transition-all hover:bg-amber-400 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-[#ffcc18] text-navy-950 transition-all hover:bg-[#ffd84d] active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
         >
           {isPlaying ? (
             <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 24 24">
@@ -135,7 +135,7 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
           )}
         </button>
 
-        <span className="tabular-nums text-sm text-zinc-400">
+        <span className="tabular-nums text-sm text-cream-200">
           {formatDuration(currentTime)} / {formatDuration(duration)}
         </span>
       </div>

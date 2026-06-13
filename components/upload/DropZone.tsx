@@ -66,8 +66,8 @@ export function DropZone({ onFileSelect }: DropZoneProps) {
         className={cn(
           'relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed px-8 py-16 text-center transition-all duration-200 cursor-pointer',
           isDragging
-            ? 'border-amber-500 bg-amber-500/5 scale-[1.01]'
-            : 'border-zinc-700 hover:border-zinc-500 hover:bg-zinc-900/50',
+            ? 'border-[#ffcc18] bg-[#ffcc18]/5 scale-[1.01]'
+            : 'border-navy-700 hover:border-navy-600 hover:bg-navy-900/50',
           isUploading && 'opacity-60 cursor-not-allowed pointer-events-none'
         )}
         onDrop={onDrop}
@@ -83,11 +83,11 @@ export function DropZone({ onFileSelect }: DropZoneProps) {
         <div
           className={cn(
             'mb-5 flex h-16 w-16 items-center justify-center rounded-full transition-colors',
-            isDragging ? 'bg-amber-500/20' : 'bg-zinc-800'
+            isDragging ? 'bg-[#ffcc18]/20' : 'bg-navy-800'
           )}
         >
           <svg
-            className={cn('h-8 w-8', isDragging ? 'text-amber-400' : 'text-zinc-400')}
+            className={cn('h-8 w-8', isDragging ? 'text-[#ffcc18]' : 'text-cream-300')}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -104,18 +104,18 @@ export function DropZone({ onFileSelect }: DropZoneProps) {
         {isUploading ? (
           <>
             <div className="mb-2 flex items-center gap-2">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" />
-              <p className="text-base font-semibold text-zinc-100">Uploading…</p>
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#ffcc18] border-t-transparent" />
+              <p className="text-base font-semibold text-cream-50">Uploading…</p>
             </div>
-            <p className="text-sm text-zinc-400">Please wait</p>
+            <p className="text-sm text-cream-200">Please wait</p>
           </>
         ) : (
           <>
-            <p className="mb-1.5 text-base font-semibold text-zinc-100">
+            <p className="mb-1.5 text-base font-semibold text-cream-50">
               {isDragging ? 'Drop to upload' : 'Drop your video here'}
             </p>
-            <p className="text-sm text-zinc-400">or click to browse</p>
-            <p className="mt-3 text-xs text-zinc-600">MP4 · MOV · WEBM &mdash; up to 100 MB</p>
+            <p className="text-sm text-cream-200">or click to browse</p>
+            <p className="mt-3 text-xs text-cream-400">MP4 · MOV · WEBM &mdash; up to 100 MB</p>
           </>
         )}
 

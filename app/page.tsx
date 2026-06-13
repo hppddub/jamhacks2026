@@ -6,12 +6,13 @@ import { AnalysisCard } from '@/components/analysis/AnalysisCard';
 import { AudioPlayer } from '@/components/player/AudioPlayer';
 import { DownloadButton } from '@/components/player/DownloadButton';
 import { useWorkflow } from '@/hooks/useWorkflow';
+import { ThemeToggle } from '@/components/ThemeToggle';
 
 function Spinner({ label }: { label: string }) {
   return (
     <div className="animate-fade-in flex flex-col items-center gap-4 py-16">
-      <div className="h-12 w-12 animate-spin rounded-full border-4 border-zinc-700 border-t-amber-500" />
-      <p className="text-sm text-zinc-400">{label}</p>
+      <div className="h-12 w-12 animate-spin rounded-full border-4 border-navy-700 border-t-[#ffcc18]" />
+      <p className="text-sm text-cream-200">{label}</p>
     </div>
   );
 }
@@ -48,14 +49,14 @@ function ErrorBanner({
         {onRetry && (
           <button
             onClick={onRetry}
-            className="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-200 transition-colors hover:bg-zinc-700"
+            className="rounded-lg border border-navy-700 bg-navy-800 px-4 py-2 text-sm text-cream-100 transition-colors hover:bg-navy-700"
           >
             Retry
           </button>
         )}
         <button
           onClick={onReset}
-          className="rounded-lg border border-zinc-700 bg-zinc-800 px-4 py-2 text-sm text-zinc-400 transition-colors hover:bg-zinc-700 hover:text-zinc-200"
+          className="rounded-lg border border-navy-700 bg-navy-800 px-4 py-2 text-sm text-cream-200 transition-colors hover:bg-navy-700 hover:text-cream-100"
         >
           Start Over
         </button>
@@ -86,21 +87,20 @@ export default function Home() {
   const currentOrder = STEP_ORDER[step] ?? -1;
 
   return (
-    <div className="min-h-screen bg-zinc-950 text-zinc-100">
+    <div className="min-h-screen bg-navy-950 text-cream-50">
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-zinc-800 bg-zinc-950/80 backdrop-blur-sm">
+      <header className="sticky top-0 z-10 border-b border-navy-800 bg-navy-950/80 backdrop-blur-sm">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500 text-zinc-950">
-              <svg className="h-5 w-5" fill="currentColor" viewBox="0 0 24 24">
-                <path d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
-              </svg>
-            </div>
-            <span className="text-lg font-bold tracking-tight">Bananamov</span>
+            <img src="/banana-logo.svg" alt="BananaMOV logo" className="h-8 w-8" />
+            <span className="text-lg font-bold tracking-tight">BananaMOV</span>
           </div>
-          <div className="flex items-center gap-2 rounded-full border border-zinc-700 bg-zinc-900 px-3 py-1">
-            <div className="h-2 w-2 rounded-full bg-amber-500" />
-            <span className="text-xs font-medium text-zinc-400">Powered by ElevenLabs</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 rounded-full border border-navy-700 bg-navy-900 px-3 py-1">
+              <div className="h-2 w-2 rounded-full bg-[#ffcc18]" />
+              <span className="text-xs font-medium text-cream-300">Powered by ElevenLabs</span>
+            </div>
+            <ThemeToggle />
           </div>
         </div>
       </header>
@@ -110,8 +110,8 @@ export default function Home() {
         {step === 'idle' && (
           <div className="animate-fade-in space-y-3 pb-4 text-center">
             <h1 className="text-4xl font-bold tracking-tight">Score your video with AI</h1>
-            <p className="mx-auto max-w-xl leading-relaxed text-zinc-400">
-              Upload any video and Bananamov will analyze its mood, energy, and visual arc —
+            <p className="mx-auto max-w-xl leading-relaxed text-cream-200">
+              Upload any video and BananaMOV will analyze its mood, energy, and visual arc —
               then generate a custom music score perfectly matched to every scene.
             </p>
           </div>
@@ -127,15 +127,15 @@ export default function Home() {
               return (
                 <div key={label} className="flex items-center gap-2">
                   {i > 0 && (
-                    <div className={`h-px w-8 transition-colors ${done ? 'bg-amber-500' : 'bg-zinc-700'}`} />
+                    <div className={`h-px w-8 transition-colors ${done ? 'bg-[#ffcc18]' : 'bg-navy-700'}`} />
                   )}
                   <div
                     className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold transition-colors ${
                       done
-                        ? 'bg-amber-500 text-zinc-950'
+                        ? 'bg-[#ffcc18] text-navy-950'
                         : active
-                        ? 'border-2 border-amber-500 text-amber-500'
-                        : 'border border-zinc-700 text-zinc-600'
+                        ? 'border-2 border-[#ffcc18] text-[#ffcc18]'
+                        : 'border border-navy-700 text-cream-400'
                     }`}
                   >
                     {done ? (
@@ -154,7 +154,7 @@ export default function Home() {
                   </div>
                   <span
                     className={`text-sm transition-colors ${
-                      done ? 'text-amber-400' : active ? 'text-zinc-200' : 'text-zinc-600'
+                      done ? 'text-[#ffcc18]' : active ? 'text-cream-50' : 'text-cream-400'
                     }`}
                   >
                     {label}
@@ -165,7 +165,7 @@ export default function Home() {
             <button
               onClick={reset}
               disabled={isLoading}
-              className="ml-auto text-xs text-zinc-600 transition-colors hover:text-zinc-400 disabled:cursor-not-allowed"
+              className="ml-auto text-xs text-cream-400 transition-colors hover:text-cream-200 disabled:cursor-not-allowed"
             >
               Start over
             </button>
@@ -200,7 +200,7 @@ export default function Home() {
             <div className="animate-fade-in">
               <button
                 onClick={upload}
-                className="w-full rounded-xl bg-amber-500 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-amber-400 active:scale-[0.99]"
+                className="w-full rounded-xl bg-[#ffcc18] py-3 text-sm font-semibold text-navy-950 transition-all hover:bg-[#ffd84d] active:scale-[0.99]"
               >
                 Upload &amp; Continue →
               </button>
@@ -215,7 +215,7 @@ export default function Home() {
           <section className="animate-fade-in">
             <button
               onClick={analyze}
-              className="w-full rounded-xl bg-amber-500 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-amber-400 active:scale-[0.99]"
+              className="w-full rounded-xl bg-[#ffcc18] py-3 text-sm font-semibold text-navy-950 transition-all hover:bg-[#ffd84d] active:scale-[0.99]"
             >
               Analyze Video →
             </button>
@@ -232,7 +232,7 @@ export default function Home() {
             {step === 'analyzed' && !error && (
               <button
                 onClick={generate}
-                className="w-full rounded-xl bg-amber-500 py-3 text-sm font-semibold text-zinc-950 transition-all hover:bg-amber-400 active:scale-[0.99]"
+                className="w-full rounded-xl bg-[#ffcc18] py-3 text-sm font-semibold text-navy-950 transition-all hover:bg-[#ffd84d] active:scale-[0.99]"
               >
                 Generate Score →
               </button>
@@ -246,14 +246,14 @@ export default function Home() {
         {score && step === 'completed' && (
           <section className="animate-fade-in space-y-6">
             <div className="flex items-center gap-3">
-              <div className="h-px flex-1 bg-zinc-800" />
-              <span className="text-xs font-medium uppercase tracking-widest text-amber-500">
+              <div className="h-px flex-1 bg-navy-800" />
+              <span className="text-xs font-medium uppercase tracking-widest text-[#ffcc18]">
                 Your Score
               </span>
-              <div className="h-px flex-1 bg-zinc-800" />
+              <div className="h-px flex-1 bg-navy-800" />
             </div>
 
-            <div className="space-y-3 rounded-xl border border-zinc-800 bg-zinc-900 p-5">
+            <div className="space-y-3 rounded-xl border border-navy-800 bg-navy-900 p-5">
               <div className="flex flex-wrap gap-2">
                 {[
                   { label: 'Mood', value: score.mood },
@@ -261,19 +261,19 @@ export default function Home() {
                   { label: 'BPM', value: String(score.bpm) },
                   { label: 'Duration', value: `${Math.round(score.durationSeconds)}s` },
                 ].map(({ label, value }) => (
-                  <div key={label} className="rounded-lg border border-zinc-700 bg-zinc-800 px-3 py-1.5">
-                    <span className="text-xs text-zinc-500">{label}: </span>
-                    <span className="text-xs font-medium capitalize text-zinc-200">{value}</span>
+                  <div key={label} className="rounded-lg border border-navy-700 bg-navy-800 px-3 py-1.5">
+                    <span className="text-xs text-cream-300">{label}: </span>
+                    <span className="text-xs font-medium capitalize text-cream-100">{value}</span>
                   </div>
                 ))}
               </div>
 
               {score.prompt && (
-                <div className="rounded-lg border border-zinc-800 bg-zinc-950/50 p-3">
-                  <p className="mb-1 text-xs font-medium uppercase tracking-wider text-zinc-600">
+                <div className="rounded-lg border border-navy-800 bg-navy-950/50 p-3">
+                  <p className="mb-1 text-xs font-medium uppercase tracking-wider text-cream-400">
                     Generation Prompt
                   </p>
-                  <p className="text-xs italic leading-relaxed text-zinc-400">{score.prompt}</p>
+                  <p className="text-xs italic leading-relaxed text-cream-200">{score.prompt}</p>
                 </div>
               )}
             </div>
@@ -281,12 +281,12 @@ export default function Home() {
             <AudioPlayer src={score.audioUrl} />
             <DownloadButton score={score} />
 
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/50 p-4 text-center">
-              <p className="text-sm text-zinc-500">
+            <div className="rounded-xl border border-navy-800 bg-navy-900/50 p-4 text-center">
+              <p className="text-sm text-cream-300">
                 Happy with your score?{' '}
                 <button
                   onClick={reset}
-                  className="text-amber-500 underline-offset-2 hover:underline"
+                  className="text-[#ffcc18] underline-offset-2 hover:underline"
                 >
                   Score another video
                 </button>
@@ -296,10 +296,10 @@ export default function Home() {
         )}
       </main>
 
-      <footer className="border-t border-zinc-800 py-8 text-center">
-        <p className="text-xs text-zinc-700">
+      <footer className="border-t border-navy-800 py-8 text-center">
+        <p className="text-xs text-cream-500">
           Built for JamHacks 2026 &middot; Powered by{' '}
-          <span className="text-zinc-500">ElevenLabs</span>
+          <span className="text-cream-400">ElevenLabs</span>
         </p>
       </footer>
     </div>

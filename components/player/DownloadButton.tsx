@@ -10,7 +10,7 @@ export function DownloadButton({ score }: DownloadButtonProps) {
     <a href={score.audioUrl} download={score.filename} className="block">
       <Button
         size="lg"
-        className="w-full gap-2 border border-zinc-700 bg-zinc-800 text-zinc-100 hover:bg-zinc-700"
+        className="w-full gap-2 border border-navy-700 bg-navy-800 text-cream-50 hover:bg-navy-700"
       >
         <svg
           className="h-4 w-4"

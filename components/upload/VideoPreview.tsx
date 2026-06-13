@@ -13,7 +13,7 @@ export function VideoPreview({ file, objectUrl, onRemove, disabled }: VideoPrevi
   const displayName = filename.length > 42 ? `${filename.slice(0, 39)}…` : filename;
 
   return (
-    <div className="animate-fade-in overflow-hidden rounded-xl border border-zinc-700 bg-zinc-900">
+    <div className="animate-fade-in overflow-hidden rounded-xl border border-navy-700 bg-navy-900">
       <video
         src={objectUrl}
         controls
@@ -22,9 +22,9 @@ export function VideoPreview({ file, objectUrl, onRemove, disabled }: VideoPrevi
       />
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-zinc-800">
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-navy-800">
             <svg
-              className="h-4 w-4 text-amber-500"
+              className="h-4 w-4 text-[#ffcc18]"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -38,14 +38,14 @@ export function VideoPreview({ file, objectUrl, onRemove, disabled }: VideoPrevi
             </svg>
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-medium text-zinc-100">{displayName}</p>
-            <p className="text-xs text-zinc-500">{formatFileSize(sizeBytes)}</p>
+            <p className="truncate text-sm font-medium text-cream-50">{displayName}</p>
+            <p className="text-xs text-cream-300">{formatFileSize(sizeBytes)}</p>
           </div>
         </div>
         <button
           onClick={onRemove}
           disabled={disabled}
-          className="ml-4 flex-shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100 disabled:cursor-not-allowed disabled:opacity-40"
+          className="ml-4 flex-shrink-0 rounded-md px-3 py-1.5 text-xs font-medium text-cream-200 transition-colors hover:bg-navy-800 hover:text-cream-50 disabled:cursor-not-allowed disabled:opacity-40"
         >
           Remove
         </button>
