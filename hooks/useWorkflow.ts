@@ -16,6 +16,21 @@ const defaultState: WorkflowState = {
   error: null,
 };
 
+async function extractVideoDuration(file: File): Promise<number | undefined> {
+  const url = URL.createObjectURL(file);
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(url);
+      const dur = video.duration;
+      resolve(Number.isFinite(dur) && dur > 0 ? dur : undefined);
+    };
+    video.onerror = () => { URL.revokeObjectURL(url); resolve(undefined); };
+    video.src = url;
+  });
+}
+
 async function apiFetch<T>(url: string, init: RequestInit): Promise<T> {
   const res = await fetch(url, init);
   const data = (await res.json()) as { error?: string } & T;
@@ -29,9 +44,11 @@ export function useWorkflow() {
   // ── Upload ───────────────────────────────────────────────────────────────────
   const uploadMutation = useMutation({
     mutationFn: async (file: File) => {
+      const durationSeconds = await extractVideoDuration(file);
       const form = new FormData();
       form.append('video', file);
-      return apiFetch<{ videoPath: string; filename: string; sizeBytes: number }>(
+      if (durationSeconds !== undefined) form.append('durationSeconds', String(durationSeconds));
+      return apiFetch<{ videoPath: string; filename: string; sizeBytes: number; durationSeconds?: number }>(
         '/api/upload',
         { method: 'POST', body: form }
       );
@@ -44,7 +61,7 @@ export function useWorkflow() {
         uploadedMetadata: {
           filename: data.filename,
           sizeBytes: data.sizeBytes,
-          durationSeconds: prev.videoDurationSeconds ?? undefined,
+          durationSeconds: data.durationSeconds,
         },
         error: null,
       }));
@@ -136,6 +153,7 @@ export function useWorkflow() {
       videoPath: state.uploadedVideoPath!,
       filename: state.uploadedMetadata!.filename,
       sizeBytes: state.uploadedMetadata!.sizeBytes,
+      durationSeconds: state.uploadedMetadata!.durationSeconds,
     });
   }, [state.uploadedVideoPath, state.uploadedMetadata, analyzeMutation]);
 

@@ -1,44 +1,39 @@
 import fs from 'fs';
 import path from 'path';
-import { ElevenLabsClient } from 'elevenlabs';
 import type { MusicGenerationProvider } from '../types';
 import type { AnalysisResult, GeneratedScore } from '@/types';
 import { buildPrompt } from './buildPrompt';
 import { generateId } from '@/lib/utils';
 
+const ELEVENLABS_API = 'https://api.elevenlabs.io/v1/sound-generation';
+const MAX_SEGMENT_SECONDS = 30;
+
 export class ElevenLabsProvider implements MusicGenerationProvider {
-  private client: ElevenLabsClient;
+  private apiKey: string;
 
   constructor() {
-    if (!process.env.ELEVENLABS_API_KEY) {
+    const key = process.env.ELEVENLABS_API_KEY;
+    if (!key) {
       throw new Error(
-        'ELEVENLABS_API_KEY is not set. Add it to .env.local or set MUSIC_PROVIDER=mock to use the mock provider.'
+        'ELEVENLABS_API_KEY is not set. Add it to .env.local or set MUSIC_PROVIDER=mock.'
       );
     }
-    this.client = new ElevenLabsClient({ apiKey: process.env.ELEVENLABS_API_KEY });
+    this.apiKey = key;
   }
 
   async generate(result: AnalysisResult): Promise<GeneratedScore> {
     const { analysis, metadata } = result;
     const prompt = buildPrompt(result);
 
-    const durationSeconds = Math.min(metadata.durationSeconds ?? 22, 22);
+    console.log('[ElevenLabs] prompt (%d chars):', prompt.length, prompt);
 
-    const audioStream = await this.client.textToSoundEffects.convert({
-      text: prompt,
-      duration_seconds: durationSeconds,
-      prompt_influence: 0.5,
-    });
+    const rawDuration = metadata.durationSeconds;
+    const totalDuration =
+      typeof rawDuration === 'number' && rawDuration >= 0.5 ? rawDuration : undefined;
 
-    const chunks: Buffer[] = [];
-    for await (const chunk of audioStream) {
-      chunks.push(Buffer.from(chunk));
-    }
-    const buffer = Buffer.concat(chunks);
-
-    if (buffer.length === 0) {
-      throw new Error('ElevenLabs returned an empty audio response.');
-    }
+    const buffer = await (totalDuration !== undefined && totalDuration > MAX_SEGMENT_SECONDS
+      ? this.fetchMultiSegment(prompt, totalDuration)
+      : this.fetchSegment(prompt, totalDuration));
 
     const id = generateId();
     const outputDir = path.join(process.cwd(), 'public', 'generated');
@@ -47,12 +42,58 @@ export class ElevenLabsProvider implements MusicGenerationProvider {
 
     return {
       audioUrl: `/generated/${id}.mp3`,
-      durationSeconds,
+      durationSeconds: totalDuration ?? 20,
       bpm: analysis.bpm,
       genre: analysis.genre,
       mood: analysis.mood,
       filename: `score-${analysis.mood}-${analysis.bpm}bpm.mp3`,
       prompt,
     };
+  }
+
+  // Splits a long duration into ≤30s segments and fetches them in parallel,
+  // then concatenates the raw MP3 buffers in order.
+  private async fetchMultiSegment(prompt: string, totalDuration: number): Promise<Buffer> {
+    const segCount = Math.ceil(totalDuration / MAX_SEGMENT_SECONDS);
+    const durations = Array.from({ length: segCount }, (_, i) =>
+      Math.min(totalDuration - i * MAX_SEGMENT_SECONDS, MAX_SEGMENT_SECONDS)
+    );
+
+    console.log(`[ElevenLabs] multi-segment: ${segCount} × ≤${MAX_SEGMENT_SECONDS}s for ${totalDuration}s video`);
+
+    const buffers: Buffer[] = [];
+    for (let i = 0; i < durations.length; i++) {
+      console.log(`[ElevenLabs] segment ${i + 1}/${segCount}: ${durations[i]}s`);
+      buffers.push(await this.fetchSegment(prompt, durations[i]));
+    }
+
+    return Buffer.concat(buffers);
+  }
+
+  private async fetchSegment(prompt: string, durationSeconds?: number): Promise<Buffer> {
+    const body: Record<string, unknown> = { text: prompt, prompt_influence: 0.3 };
+    if (durationSeconds !== undefined) body.duration_seconds = durationSeconds;
+
+    console.log('[ElevenLabs] segment body:', JSON.stringify(body));
+
+    const response = await fetch(ELEVENLABS_API, {
+      method: 'POST',
+      headers: {
+        'xi-api-key': this.apiKey,
+        'Content-Type': 'application/json',
+        'Accept': 'audio/mpeg',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('[ElevenLabs] error body:', errorText);
+      throw new Error(`ElevenLabs ${response.status}: ${errorText || '(empty response)'}`);
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length === 0) throw new Error('ElevenLabs returned an empty audio response.');
+    return buffer;
   }
 }

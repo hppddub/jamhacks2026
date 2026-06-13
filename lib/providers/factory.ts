@@ -1,10 +1,10 @@
 import type { VideoAnalysisProvider, MusicGenerationProvider } from './types';
-import { MockAnalyzer } from './analysis/MockAnalyzer';
+import { GeminiAnalyzer } from './analysis/GeminiAnalyzer';
 import { MockMusicProvider } from './music/MockMusicProvider';
 import { ElevenLabsProvider } from './music/ElevenLabsProvider';
 
 export function getAnalysisProvider(): VideoAnalysisProvider {
-  return new MockAnalyzer();
+  return new GeminiAnalyzer();
 }
 
 export function getMusicProvider(): MusicGenerationProvider {

@@ -12,12 +12,8 @@ export class MockMusicProvider implements MusicGenerationProvider {
     const id = generateId();
     const outputPath = path.join(process.cwd(), 'public', 'generated', `${id}.mp3`);
 
-    const targetDuration = metadata.durationSeconds
-      ? Math.min(metadata.durationSeconds, 22)
-      : undefined;
-
-    // Synthesise real PCM audio and encode to MP3
-    const durationSeconds = generateMp3(analysis, outputPath, targetDuration);
+    // Synthesise real PCM audio and encode to MP3, matching the video's actual duration
+    const durationSeconds = generateMp3(analysis, outputPath, result.metadata.durationSeconds);
 
     // Simulate generation latency after synthesis
     await delay(3000 + Math.random() * 2000);
