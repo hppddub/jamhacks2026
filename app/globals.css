@@ -183,3 +183,17 @@
 .animate-fade-in {
   animation: fadeIn 0.35s ease-out both;
 }
+
+/* Material Symbols icon font settings */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Bento card hover animation (feature grid) */
+.bento-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.bento-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px -5px rgba(29, 47, 69, 0.08);
+}
