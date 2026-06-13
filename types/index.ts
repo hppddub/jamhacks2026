@@ -345,6 +345,7 @@ export interface WorkflowState {
   step: WorkflowStep;
   videoFile: File | null;
   videoObjectUrl: string | null;
+  videoDurationSeconds: number | null;
   uploadedVideoPath: string | null;
   uploadedMetadata: VideoMetadata | null;
   /** Browser-playable MP3 of the video's original audio (ffmpeg-extracted at upload); null when unavailable. */
