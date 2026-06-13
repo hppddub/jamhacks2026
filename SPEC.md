@@ -9,9 +9,9 @@
 
 BananaMOV accepts a user-uploaded video, analyzes its visual characteristics across the video's timeline, and generates a matching music score via the ElevenLabs Sound Generation API. The MVP validates the full core workflow end-to-end: **Upload → Analyze → Generate → Preview → Download**.
 
-The video analysis produces a time-segmented arc (how mood and energy evolve throughout the video), which is collapsed into a single rich text prompt sent to ElevenLabs. The returned audio is served for preview and download.
+The video analysis produces a time-segmented arc (how mood and energy evolve throughout the video) plus a rich set of musical and audio-aware descriptors, which are collapsed into a single sound-only text prompt sent to ElevenLabs. The returned audio is served for preview and download.
 
-All AI integrations sit behind swappable provider interfaces. The analysis provider defaults to a deterministic mock but supports Google Gemini 2.5 Flash for real video understanding. The music provider defaults to a mock that synthesizes real PCM audio but supports ElevenLabs Sound Generation for production use.
+All AI integrations sit behind swappable provider interfaces. **Analysis currently always uses Google Gemini 2.5 Flash** — the factory is hardcoded to it and no longer reads `ANALYSIS_PROVIDER`, so a `GEMINI_API_KEY` is required (the deterministic `MockAnalyzer` remains in the codebase but is unreferenced). The music provider defaults to a mock that synthesizes real PCM audio, but supports ElevenLabs Sound Generation for production use via `MUSIC_PROVIDER=elevenlabs`.
 
 ---
 
@@ -48,13 +48,13 @@ On error at any step: an error banner appears with a "Retry" button (for analyze
 
 | Layer | Choice |
 |---|---|
-| Framework | Next.js 16.2.9 (App Router) |
+| Framework | Next.js 16.2.9 (App Router), React 19.2.4 |
 | Language | TypeScript (strict mode) |
-| Styling | Tailwind CSS v4 (`tw-animate-css`, `shadcn/tailwind.css`) |
-| Components | shadcn/ui (`button`, `badge`, `card`) |
+| Styling | Tailwind CSS v4 (`tw-animate-css`, `shadcn/tailwind.css`); custom `navy`/`cream` token system + banana-yellow `#ffcc18` accent; light/dark theme toggle |
+| Components | shadcn/ui (`button`, `badge`, `card`) + hand-written `ThemeToggle` |
 | Data fetching | TanStack Query v5 (`useMutation` only) |
-| Video analysis | Mock (default) or Google Gemini 2.5 Flash |
-| Music generation | Mock PCM synthesis (default) or ElevenLabs Sound Generation API |
+| Video analysis | **Always Google Gemini 2.5 Flash** (factory hardcoded; `MockAnalyzer` exists but unused) |
+| Music generation | Mock PCM synthesis (default) or ElevenLabs Sound Generation API (raw REST, no SDK) |
 | File storage | Local filesystem (`public/uploads`, `public/generated`) |
 | Database | None |
 | Auth | None |
@@ -75,6 +75,7 @@ On error at any step: an error banner appears with a "Retry" button (for analyze
 │       ├── analyze/route.ts           # POST — returns AnalysisResult
 │       └── generate/route.ts          # POST — returns GeneratedScore
 ├── components/
+│   ├── ThemeToggle.tsx                # Light/dark toggle ('use client', localStorage)
 │   ├── upload/
 │   │   ├── DropZone.tsx               # Drag-and-drop with client-side validation
 │   │   └── VideoPreview.tsx           # Native video element with metadata + remove button
@@ -105,6 +106,7 @@ On error at any step: an error banner appears with a "Retry" button (for analyze
 ├── types/
 │   └── index.ts                       # All shared TypeScript types
 └── public/
+    ├── banana-logo.svg                # Header logo (committed)
     ├── uploads/                       # Uploaded videos (runtime, gitignored)
     └── generated/                     # Generated MP3s (runtime, gitignored)
 ```
@@ -125,14 +127,14 @@ export interface MusicGenerationProvider {
 }
 ```
 
-The active provider is selected by env var in `lib/providers/factory.ts`:
+Provider selection in `lib/providers/factory.ts`:
 
-| Env var | Value | Provider |
+| Function | Selection logic | Provider |
 |---|---|---|
-| `ANALYSIS_PROVIDER` | `mock` (default) | `MockAnalyzer` |
-| `ANALYSIS_PROVIDER` | `gemini` | `GeminiAnalyzer` |
-| `MUSIC_PROVIDER` | `mock` (default) | `MockMusicProvider` |
-| `MUSIC_PROVIDER` | `elevenlabs` | `ElevenLabsProvider` |
+| `getAnalysisProvider()` | **Hardcoded** — `ANALYSIS_PROVIDER` is ignored | Always `GeminiAnalyzer` |
+| `getMusicProvider()` | `MUSIC_PROVIDER` (default `mock`) | `MockMusicProvider`, or `ElevenLabsProvider` when `=elevenlabs` |
+
+> `MockAnalyzer` is no longer imported by the factory. To restore mock analysis, re-add the env-driven branch in `getAnalysisProvider()`.
 
 ---
 
@@ -163,10 +165,18 @@ export type Mood =
 export type EnergyLevel = 'low' | 'medium' | 'high';
 export type Pace = 'slow' | 'moderate' | 'fast';
 
+// Expanded descriptor unions (added in the rebrand/Gemini-richness work)
+export type ColorPalette = 'warm' | 'cool' | 'dark' | 'bright' | 'neutral';
+export type CameraStyle = 'static' | 'smooth' | 'handheld' | 'dynamic';
+export type VisualPace = 'slow-cuts' | 'moderate-cuts' | 'fast-cuts';
+export type SettingType = 'nature' | 'urban' | 'intimate' | 'cinematic' | 'abstract' | 'sports' | 'documentary';
+export type AudioEnergyLevel = 'silent' | 'quiet' | 'moderate' | 'loud';
+export type MusicRole = 'background-underscore' | 'featured-score' | 'sync-to-action' | 'ambient-complement';
+
 export interface VideoMetadata {
   filename: string;
   sizeBytes: number;
-  durationSeconds?: number;  // set by GeminiAnalyzer; absent for MockAnalyzer inputs
+  durationSeconds?: number;  // extracted client-side and echoed by /api/upload; Gemini also infers it
 }
 
 // A single time segment in the video's analyzed arc
@@ -179,6 +189,7 @@ export interface TimelineSegment {
 }
 
 export interface VideoAnalysis {
+  // Core
   mood: Mood;                // dominant mood (driven by peak energy segment)
   energyLevel: EnergyLevel; // dominant energy level
   pace: Pace;
@@ -189,6 +200,25 @@ export interface VideoAnalysis {
   instrumentSuggestions: string[];
   analysisSummary: string;   // 1–2 sentence human-readable summary
   timeline: TimelineSegment[]; // 3–5 time-ordered segments spanning full video
+
+  // Expanded visual descriptors (all optional)
+  colorPalette?: ColorPalette;
+  cameraStyle?: CameraStyle;
+  visualPace?: VisualPace;
+  settingType?: SettingType;
+
+  // Expanded musical brief (sound-only; all optional)
+  emotionalArc?: string;
+  sonicTexture?: string;
+  musicalRecommendation?: string;
+  keyMode?: 'major' | 'minor' | 'modal';
+  rhythmicFeel?: string;
+  dynamicArc?: string;
+
+  // Existing-audio awareness (all optional)
+  existingAudio?: string;
+  audioEnergyLevel?: AudioEnergyLevel;
+  musicRole?: MusicRole;
 }
 
 // Full result returned by the analysis provider
@@ -226,19 +256,21 @@ export interface WorkflowState {
 
 ### POST `/api/upload`
 
-- Accepts: `multipart/form-data` with `video` field
+- Accepts: `multipart/form-data` with `video` field and optional `durationSeconds` field (string, supplied by the client)
 - Validates: MIME type must be one of `video/mp4`, `video/quicktime`, `video/webm`; max 100 MB
 - Saves to: `public/uploads/{uuid}.{ext}` using `fs.writeFileSync`
-- Returns: `{ videoPath: string, filename: string, sizeBytes: number }`
+- Returns: `{ videoPath: string, filename: string, sizeBytes: number, durationSeconds?: number }`
 - `videoPath` is the absolute filesystem path passed verbatim to the analysis provider
+- `durationSeconds` is echoed back only when finite and `> 0`
+- Errors return a generic `'Upload failed. Please try again.'` (this route does **not** surface raw error messages, unlike analyze/generate)
 
 ### POST `/api/analyze`
 
-- Accepts: `{ videoPath: string, filename: string, sizeBytes: number }`
-- Validates: all three fields required and correctly typed
-- Calls: `getAnalysisProvider().analyze(...)`
+- Accepts: `{ videoPath: string, filename: string, sizeBytes: number }` (the client also sends `durationSeconds`, but the route does not read it — Gemini infers duration)
+- Validates: `videoPath`, `filename`, `sizeBytes` required and correctly typed
+- Calls: `getAnalysisProvider().analyze(...)` → **always `GeminiAnalyzer`**
 - Returns: `AnalysisResult`
-- Error messages from providers (e.g. Gemini processing failures) are surfaced directly to the client
+- Error messages from providers (e.g. Gemini processing failures, missing API key) are surfaced directly to the client
 
 ### POST `/api/generate`
 
@@ -280,69 +312,61 @@ Uses one of three predefined arc templates (3-segment, 4-segment, 5-segment), se
 
 ### GeminiAnalyzer arc generation
 
-Sends the actual video to Gemini 2.5 Flash via the File API with a detailed JSON schema prompt. Receives real analysis of visual content, color grading, camera motion, and emotional tone. The model returns `videoDurationSeconds` which is stored into `metadata.durationSeconds`. The returned timeline is sorted by `startSeconds`, forced to start at 0 and end at `videoDurationSeconds`. Falls back to a 3-equal-segment timeline if the model returns fewer than 2 segments or invalid JSON.
+Sends the actual video to Gemini 2.5 Flash via the File API with a detailed JSON schema prompt. Receives real analysis of visual content, color grading, camera motion, emotional tone — **and the existing audio track** (Gemini is asked to listen and report what is audible, how loud it is, and what role a composed score should play). The model returns `videoDurationSeconds` which is stored into `metadata.durationSeconds`. The returned timeline is sorted by `startSeconds`, forced to start at 0 and end at `videoDurationSeconds`. Falls back to a 3-equal-segment timeline (`calm/low → emotional/medium → inspirational/high`) if the model returns fewer than 2 segments or invalid JSON. See the Gemini Integration section for the full expanded field set.
 
 ---
 
 ## ElevenLabs Integration
 
-### SDK usage
+### Raw REST usage (no SDK)
+
+`ElevenLabsProvider` calls the Sound Generation endpoint directly with `fetch` — the `elevenlabs` SDK is not used:
 
 ```ts
-import { ElevenLabsClient } from 'elevenlabs';
-const client = new ElevenLabsClient({ apiKey: process.env.ELEVENLABS_API_KEY });
-const audioStream = await client.textToSoundEffects.convert({
-  text: prompt,
-  duration_seconds: Math.min(metadata.durationSeconds ?? 20, 22),
-  prompt_influence: 0.5,
+const ELEVENLABS_API = 'https://api.elevenlabs.io/v1/sound-generation';
+const body = { text: prompt, prompt_influence: 0.3 };
+if (durationSeconds !== undefined) body.duration_seconds = durationSeconds; // omitted when unknown
+
+const response = await fetch(ELEVENLABS_API, {
+  method: 'POST',
+  headers: { 'xi-api-key': apiKey, 'Content-Type': 'application/json', 'Accept': 'audio/mpeg' },
+  body: JSON.stringify(body),
 });
+const buffer = Buffer.from(await response.arrayBuffer());
 ```
 
 ### Prompt construction (`lib/providers/music/buildPrompt.ts`)
 
-The `buildPrompt()` function is a pure function shared by both `MockMusicProvider` and `ElevenLabsProvider`:
+`buildPrompt()` is a pure function shared by `MockMusicProvider` and `ElevenLabsProvider`. It was rewritten to use the richer Gemini analysis and to stay **sound-only** within a **450-character** budget.
 
-1. Opens with: `"{genre} music score, approximately {bpm} BPM,"`
-2. Describes each timeline segment:
-   - First: `"beginning with a {energy}-energy, {mood} feel"`
-   - Middle: `"building through a {energy}-energy, {mood} section"`
-   - Last: `"ending with a {energy}-energy, {mood} resolution"`
-3. Lists instruments: `"Features {instrumentSuggestions[0..3]}."`
-4. Closes with a mood-specific sentence from `MOOD_CLOSINGS`:
-   - `dramatic` → "Cinematic, powerful, and emotionally impactful."
-   - `calm` → "Peaceful, reflective, and serene."
-   - `energetic` → "Dynamic, driving, and high-energy."
-   - `emotional` → "Heartfelt, tender, and deeply moving."
-   - `inspirational` → "Uplifting, hopeful, and motivating."
-   - `suspenseful` → "Tense, mysterious, and full of anticipation."
-   - `corporate` → "Professional, polished, and confident."
-   - `happy` → "Bright, playful, and optimistic."
-5. Truncated to 1000 characters (ElevenLabs `description` field limit)
+- A `VISUAL_LEAK` regex strips any model free-text that mentions the picture (`video`, `scene`, `camera`, `person`, …).
+- **Core clause:** `"{Genre} score, {bpm} BPM, {energy} energy[, {keyMode} key]."`
+- A `musicRole` descriptor sentence is appended when present (e.g. *"Composed as a featured score — full presence, emotionally centred."*).
+- **Two paths:**
+  - **Path A** (Gemini gave a clean `musicalRecommendation`): use it as the centrepiece, with an arc clause (`emotionalArc` if clean, else timeline-derived) + `"Features {instruments}."` + a mood closing.
+  - **Path B** (fallback): build a `"Texture: …"` clause from `sonicTexture` + `SETTING_SONIC[settingType]` + `PALETTE_SONIC[colorPalette]`, append clean `rhythmicFeel`/`dynamicArc`, then the timeline arc, instruments, and closing.
+- Mood closings (`MOOD_CLOSING`, shorter than the legacy set; default *"Evocative and resonant."*): dramatic → *"Powerful and cinematic."*, calm → *"Peaceful and serene."*, energetic → *"Driving and propulsive."*, emotional → *"Tender and moving."*, inspirational → *"Uplifting and hopeful."*, suspenseful → *"Tense and anticipatory."*, corporate → *"Polished and confident."*, happy → *"Bright and optimistic."*
+- `assemble()` joins parts in order, **skipping** any part that would exceed 450 chars (so one long part doesn't drop everything after it).
 
-**Example prompt:**
-> "Cinematic music score, approximately 95 BPM, beginning with a low-energy, calm feel, building through a medium-energy, suspenseful section, ending with a high-energy, dramatic resolution. Features strings, piano, brass, cello. Cinematic, powerful, and emotionally impactful."
-
-`buildPrompt.ts` also exports `buildTags(result: AnalysisResult): string[]`, which returns up to 10 tags for the ElevenLabs request (mood, genre, energy level, pace, and top 3 instruments).
+`buildPrompt.ts` also exports `buildTags(result)` (mood, genre, energy, pace, top-3 instruments; ≤10) — currently unused by either provider but retained for future tag-based requests.
 
 ### Duration handling
 
-- `duration_seconds = Math.min(metadata.durationSeconds ?? 20, 22)` — capped at 22s (ElevenLabs limit)
-- If video duration is unknown (mock analysis), defaults to 20 seconds
-- The audio player plays whatever duration was actually returned
+- `duration_seconds` is sent **only when `metadata.durationSeconds >= 0.5`**; otherwise omitted (ElevenLabs picks a default). There is **no 22s cap**.
+- **Long videos (> 30s)** are split into ≤30s segments fetched sequentially; their raw MP3 buffers are concatenated (`Buffer.concat`) into one file.
+- Returned `durationSeconds` = the known total, or `20` when unknown.
+- The audio player plays whatever duration was actually returned.
 
 ### Response handling
 
-The ElevenLabs SDK returns an async iterable. Collect into a `Buffer`, validate non-empty, write to disk:
+Reads the response body as a single `Buffer`, validates non-empty, writes to disk:
 
 ```ts
-const chunks: Buffer[] = [];
-for await (const chunk of audioStream) {
-  chunks.push(Buffer.from(chunk));
-}
-const buffer = Buffer.concat(chunks);
+if (!response.ok) throw new Error(`ElevenLabs ${response.status}: ${await response.text()}`);
+const buffer = Buffer.from(await response.arrayBuffer());
 if (buffer.length === 0) throw new Error('ElevenLabs returned an empty audio response.');
 fs.mkdirSync(outputDir, { recursive: true });
-fs.writeFileSync(outputPath, buffer);
+fs.writeFileSync(path.join(outputDir, `${id}.mp3`), buffer);
 ```
 
 ---
@@ -370,11 +394,21 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 
 ### Response parsing
 
-All fields are validated through guard functions (`toMood`, `toEnergy`, `toPace`, `toGenre`, `toNumber`, `toStringArray`) that fall back to safe defaults rather than throwing. BPM is clamped to [60, 160]. MotionScore is clamped to [0.0, 1.0]. The timeline is sorted and boundary-corrected.
+All fields are validated through guard functions that fall back to safe values rather than throwing:
+- Required (default): `toMood` → `'emotional'`, `toEnergy` → `'medium'`, `toPace` → `'moderate'`, `toGenre` → `'cinematic'`, `toNumber`, `toStringArray` → `[]`. `mood`/`energyLevel` fall back to the **peak segment** when absent.
+- Optional (→ `undefined`): `toColorPalette`, `toCameraStyle`, `toVisualPace`, `toSettingType`, `toAudioEnergyLevel`, `toMusicRole`, plus the free-text fields (`emotionalArc`, `sonicTexture`, `musicalRecommendation`, `rhythmicFeel`, `dynamicArc`, `existingAudio`) kept only when non-empty strings, and `keyMode` kept only when `major|minor|modal`.
+
+BPM is clamped to [60, 160]; `sceneCount` is `max(1, …)`; MotionScore is clamped to [0.0, 1.0]; `instrumentSuggestions` is sliced to 4. The timeline is sorted and boundary-corrected (first start = 0, last end = duration), with per-segment label defaults.
+
+### Expanded analysis fields requested
+
+Beyond the core profile, the prompt asks Gemini for: `colorPalette`, `cameraStyle`, `visualPace`, `settingType` (visual descriptors); `emotionalArc`, `sonicTexture`, `musicalRecommendation`, `keyMode`, `rhythmicFeel`, `dynamicArc` (a sound-only musical brief, with explicit instructions never to describe the picture); and `existingAudio`, `audioEnergyLevel`, `musicRole` (the model listens to the actual audio track and decides how a composed score should coexist with it). These feed `buildPrompt()`'s two-path logic.
 
 ---
 
 ## Mock Providers
+
+> **Note:** `MockAnalyzer` is currently **unreferenced by the factory** (analysis always uses Gemini). It is kept fully maintained and is documented here for completeness / offline use.
 
 ### MockAnalyzer
 
@@ -387,21 +421,23 @@ All fields are validated through guard functions (`toMood`, `toEnergy`, `toPace`
 - SceneCount from [3, 40], motionScore from [0.1, 1.0]
 - InstrumentSuggestions: 2–4 items from a pool of 15
 - analysisSummary: template string using pace, peak mood, energy, sceneCount, genre, bpm, top 2 instruments
+- **Also emits all expanded fields** (to mirror Gemini): seeded `colorPalette`/`cameraStyle`/`visualPace`/`settingType`; templated `emotionalArc` and `musicalRecommendation`; seeded `sonicTexture`/`rhythmicFeel`/`dynamicArc` from fixed phrase pools; `keyMode` derived from peak mood; seeded `existingAudio`/`audioEnergyLevel`; and `musicRole` **derived from `audioEnergyLevel`** (loud→underscore, silent→featured, moderate→sync/ambient, else ambient)
 - Simulated delay: 2–3 seconds (`delay(2000 + Math.random() * 1000)`)
 
 ### MockMusicProvider
 
 - Calls `buildPrompt(result)` (same function as ElevenLabsProvider)
-- Calls `generateMp3(analysis, outputPath)` to produce a real playable MP3 via PCM synthesis
-- Returns duration from `generateMp3` (energy-dependent: low=15s, medium=18s, high=22s)
+- Calls `generateMp3(analysis, outputPath, metadata.durationSeconds)` to produce a real playable MP3 via PCM synthesis, **matched to the real video duration**
+- Returns the actual synthesized duration from `generateMp3` (the real video length, clamped to [1, 120]s; falls back to energy-based 15/18/22s only when duration is unknown)
 - Simulated delay: 3–5 seconds (`delay(3000 + Math.random() * 2000)`)
 - Filename: `score-{mood}-{bpm}bpm.mp3`
 
 ### PCM synthesis (`lib/audio/generateTone.ts`)
 
-Generates real audio content from the analysis:
+Generates real audio content from the analysis. Signature: `generateMp3(analysis, outputPath, targetDurationSeconds?): number`.
 
 - **Sample rate**: 44,100 Hz, mono, 128 kbps
+- **Duration**: `clamp(targetDurationSeconds ?? ENERGY_DURATION[energy], 1, 120)` — matches the real video length, capped at `MAX_MOCK_DURATION = 120`s; energy fallback is low=15s, medium=18s, high=22s
 - **Root frequency by mood**: calm=C4 (261.63 Hz), happy=E4 (329.63 Hz), energetic=G4 (392.0 Hz), dramatic=A3 (220.0 Hz), suspenseful=B3 (246.94 Hz), inspirational=F4 (349.23 Hz), emotional=D4 (293.66 Hz), corporate=Eb4 (311.13 Hz)
 - **Chord progression**: I–IV–V–I (major triads as frequency ratios relative to root)
 - **Bar duration**: `(60 / bpm) * 4` seconds
@@ -409,11 +445,19 @@ Generates real audio content from the analysis:
 - **Amplitude**: low=0.25, medium=0.45, high=0.65
 - **Noise**: light noise texture (`(Math.random()-0.5) * 0.015`) added only at high energy
 - **Encoding**: lamejs `Mp3Encoder` in 1152-sample chunks (lamejs internal requirement, multiple of 576)
-- **Output**: writes directly to `outputPath`, returns `durationSeconds`
+- **Output**: writes directly to `outputPath`, returns `durationSeconds` rounded to 1 decimal
 
 ---
 
 ## Components
+
+> All components were recolored in the rebrand to use the theme-aware `navy-*`/`cream-*` tokens plus the literal banana-yellow `#ffcc18` (hover `#ffd84d`). The legacy `zinc-*`/`amber-500` classes are gone.
+
+### ThemeToggle
+
+- `'use client'` icon button in the header (sun in dark mode, moon in light)
+- Defaults to dark; on mount reads `localStorage.theme` and removes `.dark` from `<html>` if `'light'`
+- `toggle()` flips the `.dark` class on `document.documentElement` and persists `'dark'`/`'light'` to `localStorage`
 
 ### DropZone
 
@@ -421,7 +465,7 @@ Generates real audio content from the analysis:
 - `accept="video/mp4,video/quicktime,video/webm"`
 - Client-side validation before `onFileSelect` fires: type check + size ≤ 100 MB
 - Shows inline error below the zone on validation failure
-- Drag-over visual: `border-amber-500 bg-amber-500/5 scale-[1.01]`
+- Drag-over visual: `border-[#ffcc18] bg-[#ffcc18]/5 scale-[1.01]`
 - Keyboard accessible: Enter/Space triggers file browser
 - Callback: `onFileSelect(file: File)` — does NOT directly trigger upload
 
@@ -435,47 +479,48 @@ Generates real audio content from the analysis:
 
 ### AnalysisCard
 
-- BPM is the hero number: `text-4xl font-bold text-amber-500` in the top-right corner
-- **Mood badges** are mood-specific colors:
-  - `inspirational` → sky, `emotional` → violet, `dramatic` → red, `energetic` → orange
-  - `suspenseful` → purple, `corporate` → blue, `happy` → yellow, `calm` → green
-- Energy badge: green (low), yellow (medium), red (high)
-- Pace badge: blue
-- Genre badge: zinc (neutral)
-- Stats grid (2-column): Est. Scene Cuts (integer) + Motion Score (progress bar, amber fill)
-- Instrument chips: flat zinc-800 bordered tags
-- `analysisSummary`: italic, zinc-400, border-t separator
-- `<TimelineBar>`: border-t separator below summary
+- BPM is the hero number: `text-4xl font-bold text-[#ffcc18]` in the top-right corner
+- **Mood badges** use the brand hex palette (some with `dark:` overrides), via a `MOOD_BADGE` map of tinted `bg/text/border`:
+  - `inspirational` & `corporate` → `#7CA0CB` (slate-blue); `emotional` & `suspenseful` → `#6EA556` (green)
+  - `dramatic` → `#B28B52` bronze / `dark:#fdf3ab`; `energetic` → `#ffcc18`; `happy` → `#B28B52` / `dark:` yellow; `calm` → green-500
+  - Unknown mood → neutral navy fallback
+- Energy badge: low = green; medium = `#B28B52`/`dark:`yellow; high = `#B28B52`/`dark:#fdf3ab`
+- Pace badge: `#7CA0CB` (always)
+- Genre badge: neutral `bg-navy-800 text-cream-100`
+- Stats grid (2-column): Est. Scene Cuts (integer) + Motion Score (progress bar, `#ffcc18` fill over `bg-navy-700`)
+- Instrument chips: flat `bg-navy-800 border-navy-700` tags
+- `analysisSummary`: italic, `text-cream-200`, `border-t border-navy-800` separator
+- `<TimelineBar>`: second `border-t` separator below summary
 
 ### TimelineBar
 
 - Horizontal `flex` row, `h-9`, `rounded-lg`, `overflow-hidden`
 - Each segment's width is `((endSeconds - startSeconds) / totalDuration) * 100%`
-- Colors by energy: `bg-green-500` (low), `bg-yellow-500` (medium), `bg-red-500` (high)
-- Text color by energy (dark): `text-green-950`, `text-yellow-950`, `text-red-950`
+- Colors by energy: `bg-[#6EA556]` (low, green), `bg-[#fdf3ab]` (medium, pale yellow), `bg-[#FFCC18]` (high, banana)
+- Text color is navy `text-[#1D2F45]` for all energies (dark text on light bars)
 - First segment: `rounded-l-lg`, last: `rounded-r-lg`
 - Text label (the mood word) shown only when `widthPct > 16%`
 - Hover: `hover:opacity-80`
 - Title tooltip: `${seg.label} (${seg.startSeconds}s – ${seg.endSeconds}s)`
-- Time axis below: "0s" on left, `{totalDuration}s` on right
+- "Video Arc" heading; time axis below: "0s" on left, `{totalDuration}s` on right
 
 ### AudioPlayer
 
 - `'use client'`; `useRef<HTMLAudioElement>` — no library
 - Local state: `isPlaying`, `currentTime`, `duration`, `isLoaded`
 - `useEffect` attaches `timeupdate`, `loadedmetadata`, `ended`; cleans up on unmount
-- **Decorative waveform**: 40 bars with heights computed once from sine/cosine formula; bars to the left of playback position colored amber-500, others zinc-700
-- **Seek bar**: `<input type="range">` with amber gradient fill via inline `background` style: `linear-gradient(to right, #f59e0b ${pct}%, #3f3f46 ${pct}%)`
-- Thumb styled via Tailwind arbitrary pseudo-selector variants `[&::-webkit-slider-thumb]` and `[&::-moz-range-thumb]`
-- Play/pause: amber filled circle button with inline SVG icons
+- **Decorative waveform**: 40 bars with heights computed once from sine/cosine formula; bars to the left of playback position colored `#ffcc18`, others `bg-navy-700`
+- **Seek bar**: `<input type="range">` with banana gradient fill via inline `background` style: `linear-gradient(to right, #ffcc18 ${pct}%, #2D4B6E ${pct}%)`
+- Thumb styled via Tailwind arbitrary pseudo-selector variants `[&::-webkit-slider-thumb]` and `[&::-moz-range-thumb]` (colored `#ffcc18`)
+- Play/pause: `#ffcc18` filled circle button (`h-10 w-10`, `text-navy-950`) with inline SVG icons
 - Time display: `{formatDuration(currentTime)} / {formatDuration(duration)}`
-- Shows "Loading audio…" in zinc-600 while `!isLoaded`
+- Shows "Loading audio…" in `text-cream-400` while `!isLoaded`
 
 ### DownloadButton
 
-- `<a href={score.audioUrl} download={score.filename} className="block">` wrapping shadcn `<Button>`
-- Button styled as `bg-zinc-800 text-zinc-100 hover:bg-zinc-700` (dark secondary style, not amber)
-- Shows `Download {score.filename}`
+- `<a href={score.audioUrl} download={score.filename} className="block">` wrapping shadcn `<Button size="lg">`
+- Button styled as `bg-navy-800 text-cream-50 border border-navy-700 hover:bg-navy-700` (dark secondary style, not banana)
+- Shows `Download {score.filename}` with a download icon
 - Direct anchor download — no JavaScript fetch or Blob
 
 ---
@@ -515,6 +560,12 @@ Errors regress the step to the previous stable step (not just set `state.error`)
 
 The page is `'use client'`. It computes `STEP_ORDER` (numeric values per step) to drive the step indicator's done/active/pending states.
 
+### Header (always visible)
+- Sticky, `bg-navy-950/80 backdrop-blur-sm`, `border-b border-navy-800`
+- Left: `banana-logo.svg` + "BananaMOV" wordmark
+- Right: "Powered by ElevenLabs" pill + `<ThemeToggle />`
+- A footer ("Built for JamHacks 2026 · Powered by ElevenLabs") sits below `<main>`
+
 ### Hero section
 - Visible only when `step === 'idle'`
 - Headline: "Score your video with AI"
@@ -523,10 +574,10 @@ The page is `'use client'`. It computes `STEP_ORDER` (numeric values per step) t
 ### Step indicator
 - Visible when `step !== 'idle'`
 - Three labeled circles: Upload (1), Analyze (2), Generate (3)
-- Done steps: filled amber-500 circle with checkmark icon + amber-400 label
-- Active step: amber-500 border outline + zinc-200 label
-- Pending: zinc-700 border + zinc-600 label
-- Connecting lines between circles: amber-500 when preceding step is done, zinc-700 otherwise
+- Done steps: filled `#ffcc18` circle with checkmark icon + `#ffcc18` label
+- Active step: `#ffcc18` border outline + `cream-50` label
+- Pending: `navy-700` border + `cream-400` label
+- Connecting lines between circles: `#ffcc18` when preceding step is done, `navy-700` otherwise
 - "Start over" link in the top-right (disabled during loading)
 
 ### Upload section
@@ -546,7 +597,7 @@ The page is `'use client'`. It computes `STEP_ORDER` (numeric values per step) t
 ### Score section (completed step)
 - Divider with "Your Score" label
 - Metadata badges: Mood, Genre, BPM, Duration
-- Generation prompt box (italic zinc-400 text in zinc-950/50 box)
+- Generation prompt box (italic `cream-200` text in a `bg-navy-950/50` box)
 - `<AudioPlayer src={score.audioUrl} />`
 - `<DownloadButton score={score} />`
 - "Score another video" link → `reset()`
@@ -558,22 +609,27 @@ The page is `'use client'`. It computes `STEP_ORDER` (numeric values per step) t
 - "Start Over" button always present
 
 ### Spinner component (inline)
-- `h-12 w-12 animate-spin` border spinner (zinc-700 base, amber-500 top)
-- Single label string beneath
+- `h-12 w-12 animate-spin` border spinner (`navy-700` base, `#ffcc18` top)
+- Single label string beneath (`text-cream-200`)
 
 ---
 
 ## Visual Design
 
-- Dark theme: zinc-950 background, zinc-900 cards, zinc-800 elevated, zinc-700 borders
-- Accent: amber-500 (`#f59e0b`) for CTAs, progress, highlights, spinner top border
-- Header: sticky, `bg-zinc-950/80 backdrop-blur-sm`, `border-b border-zinc-800`
+Theme-aware via custom tokens in `globals.css`: Tailwind utilities `navy-*` (surface/background) and `cream-*` (text/foreground) resolve to CSS variables that flip between `:root` (light = warm parchment) and `.dark` (dark = navy). **Token names are semantic, not literal** — `navy-*` is always the surface even in light mode. The banana accent `#ffcc18` is a constant literal across themes.
+
+- Dark theme (default): `navy-950` `#1D2F45` background, `navy-900` `#1F3550` cards, `navy-800` `#243D5C` elevated, `navy-700` `#2D4B6E` borders; `cream-50` `#FDF6EB` text
+- Light theme (parchment): `navy-950` `#F8F0E2` background … `navy-700` `#CFBB92` borders; `cream-50` `#1D2F45` text
+- Accent: banana-yellow `#ffcc18` (hover `#ffd84d`) for CTAs, progress, highlights, spinner top — applied as literal `bg-[#ffcc18]` (not a token)
+- Other brand colors used in badges/timeline: `#fdf3ab` pale-yellow, `#7CA0CB` slate-blue, `#6EA556` leaf-green, `#B28B52` bronze
+- Header: sticky, `bg-navy-950/80 backdrop-blur-sm`, `border-b border-navy-800`
 - Content: `max-w-3xl`, `space-y-8`, `px-6 py-12`
-- Card pattern: `rounded-xl border border-zinc-700 bg-zinc-900 p-6`
-- Buttons: `rounded-xl bg-amber-500 py-3 text-sm font-semibold text-zinc-950` with `hover:bg-amber-400 active:scale-[0.99]`
+- Card pattern: `rounded-xl border border-navy-700 bg-navy-900 p-6`
+- Buttons: `rounded-xl bg-[#ffcc18] py-3 text-sm font-semibold text-navy-950` with `hover:bg-[#ffd84d] active:scale-[0.99]`
 - Typography: Geist Sans (body) and Geist Mono (code) from `next/font/google`
 - Animations: `animate-fade-in` (`fadeIn` keyframe: `opacity: 0, translateY(8px) → opacity: 1, translateY(0)`, 0.35s ease-out)
-- The CSS also imports `tw-animate-css` and the full shadcn CSS variable system (light + dark modes defined using oklch colors)
+- Theme toggle: `<html>` starts with `dark`; `ThemeToggle` flips the `.dark` class and persists to `localStorage`
+- The CSS also imports `tw-animate-css`, declares `@custom-variant dark`, maps tokens in `@theme inline`, and redefines the shadcn variable set under both `:root` and `.dark`
 
 ---
 
@@ -581,21 +637,20 @@ The page is `'use client'`. It computes `STEP_ORDER` (numeric values per step) t
 
 ```bash
 # .env.local (gitignored — never commit)
-ANALYSIS_PROVIDER=mock          # 'mock' or 'gemini'
 MUSIC_PROVIDER=elevenlabs       # 'mock' or 'elevenlabs'
 ELEVENLABS_API_KEY=your_key
-GEMINI_API_KEY=your_key         # required only when ANALYSIS_PROVIDER=gemini
+GEMINI_API_KEY=your_key         # required — analysis always uses Gemini
 ```
 
 ```bash
 # .env.example (committed — no real keys)
-ANALYSIS_PROVIDER=mock
 MUSIC_PROVIDER=mock
 ELEVENLABS_API_KEY=
 GEMINI_API_KEY=
 ```
 
-Both factory functions default to `'mock'` if env vars are absent. No API keys required for full local mock workflow.
+- **`ANALYSIS_PROVIDER` is no longer read** — the analysis factory is hardcoded to Gemini, so `GEMINI_API_KEY` is effectively required to run the analyze step.
+- Only `MUSIC_PROVIDER` still branches (default `'mock'`). `ELEVENLABS_API_KEY` is required when `MUSIC_PROVIDER=elevenlabs`.
 
 ---
 
@@ -618,10 +673,13 @@ Both factory functions default to `'mock'` if env vars are absent. No API keys r
 - No database or persistence
 - No payments
 - No stem editing or DAW features
-- No multi-segment audio stitching (single ElevenLabs call, max 22s)
 - No real-time streaming audio
 - No multi-page routing
-- No localStorage / sessionStorage
+- No persisted state beyond the theme preference (`localStorage.theme` is the only stored value; all workflow state is React-only)
+
+**Now implemented (previously listed as out of scope):**
+- Multi-segment audio stitching for videos > 30s (`ElevenLabsProvider` fetches sequential ≤30s segments and concatenates the raw MP3 buffers)
+- Light/dark theme toggle with `localStorage` persistence
 
 ---
 
@@ -643,6 +701,6 @@ A user can:
 Additionally:
 - `npm run build` succeeds with zero TypeScript errors
 - `npm run lint` passes with zero ESLint errors
-- Different videos produce different analysis results and prompts (via seeded PRNG)
-- ElevenLabs integration works when `MUSIC_PROVIDER=elevenlabs` and key is set
-- Gemini integration works when `ANALYSIS_PROVIDER=gemini` and key is set
+- Gemini analysis runs (always-on; requires `GEMINI_API_KEY`) and different videos produce different results/prompts
+- ElevenLabs integration works when `MUSIC_PROVIDER=elevenlabs` and key is set (incl. multi-segment for long videos)
+- The light/dark theme toggle works and persists across reloads
