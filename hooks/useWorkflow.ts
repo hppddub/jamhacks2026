@@ -10,6 +10,7 @@ const defaultState: WorkflowState = {
   videoObjectUrl: null,
   uploadedVideoPath: null,
   uploadedMetadata: null,
+  originalAudioUrl: null,
   analysis: null,
   score: null,
   error: null,
@@ -50,10 +51,13 @@ export function useWorkflow() {
       const form = new FormData();
       form.append('video', file);
       if (durationSeconds !== undefined) form.append('durationSeconds', String(durationSeconds));
-      return apiFetch<{ videoPath: string; filename: string; sizeBytes: number; durationSeconds?: number }>(
-        '/api/upload',
-        { method: 'POST', body: form }
-      );
+      return apiFetch<{
+        videoPath: string;
+        filename: string;
+        sizeBytes: number;
+        durationSeconds?: number;
+        originalAudioUrl?: string;
+      }>('/api/upload', { method: 'POST', body: form });
     },
     onSuccess: (data) => {
       setState((prev) => ({
@@ -65,6 +69,7 @@ export function useWorkflow() {
           sizeBytes: data.sizeBytes,
           durationSeconds: data.durationSeconds,
         },
+        originalAudioUrl: data.originalAudioUrl ?? null,
         error: null,
       }));
     },

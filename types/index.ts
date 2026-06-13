@@ -143,6 +143,8 @@ export interface WorkflowState {
   videoObjectUrl: string | null;
   uploadedVideoPath: string | null;
   uploadedMetadata: VideoMetadata | null;
+  /** Browser-playable MP3 of the video's original audio (ffmpeg-extracted at upload); null when unavailable. */
+  originalAudioUrl: string | null;
   analysis: AnalysisResult | null;
   score: GeneratedScore | null;
   error: string | null;

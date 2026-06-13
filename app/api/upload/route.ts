@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import { generateId } from '@/lib/utils';
+import { extractOriginalAudio } from '@/lib/audio/extractOriginalAudio';
 
 const ACCEPTED_MIME: Record<string, string> = {
   'video/mp4': 'mp4',
@@ -50,11 +51,16 @@ export async function POST(request: Request) {
         ? durationSeconds
         : undefined;
 
+    // Extract a browser-playable copy of the original audio track (best-effort).
+    // The browser often can't decode the source's audio codec; ffmpeg can.
+    const originalAudioUrl = extractOriginalAudio(fullPath, id);
+
     return NextResponse.json({
       videoPath: fullPath,
       filename: file.name,
       sizeBytes: file.size,
       durationSeconds: validDuration,
+      originalAudioUrl,
     });
   } catch (error) {
     console.error('[/api/upload]', error);
