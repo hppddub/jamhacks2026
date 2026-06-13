@@ -11,6 +11,8 @@
   "dependencies": {
     "@base-ui/react": "^1.5.0",
     "@elevenlabs/elevenlabs-js": "^2.52.0",
+    "@google/genai": "^2.8.0",
+    "@google/generative-ai": "^0.24.1",
     "@tanstack/react-query": "^5.101.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
