@@ -1,22 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import { spawnSync, execFileSync } from 'child_process';
+import { spawnSync } from 'child_process';
 import type { StemSeparationProvider } from './types';
 import type { Stem, StemId, StemResult, InstrumentSpec } from '@/types';
 import { generateId } from '@/lib/utils';
-
-// On Windows, merge the user-level registry PATH so tools installed after the server started
-// (e.g. ffmpeg via winget) are visible to subprocesses without a server restart.
-function resolvedPath(): string {
-  const base = process.env.PATH ?? '';
-  if (process.platform !== 'win32') return base;
-  try {
-    const out = execFileSync('reg', ['query', 'HKCU\\Environment', '/v', 'PATH'], { encoding: 'utf8' });
-    const match = out.match(/PATH\s+REG_(?:SZ|EXPAND_SZ)\s+(.+)/i);
-    if (match) return `${base};${match[1].trim()}`;
-  } catch { /* best-effort */ }
-  return base;
-}
+import { resolvedPath } from '@/lib/audio/ffmpegEnv';
 
 const STEM_LABELS: Record<StemId, string> = {
   drums:  'Drums & Percussion',
