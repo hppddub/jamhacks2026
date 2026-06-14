@@ -1,7 +1,7 @@
 import path from 'path';
 import type { StemSeparationProvider } from './types';
-import type { Stem, StemId, StemResult } from '@/types';
-import { generateStemMp3 } from '@/lib/audio/generateTone';
+import type { Stem, StemId, StemResult, InstrumentSpec } from '@/types';
+import { generateStemWav } from '@/lib/audio/generateTone';
 import type { StemConfig } from '@/lib/audio/generateTone';
 import { generateId, delay } from '@/lib/utils';
 
@@ -25,18 +25,18 @@ const MOCK_BPM = 100;
 const MOCK_DURATION = 20;
 
 export class MockStemProvider implements StemSeparationProvider {
-  async separate(sourceAudioUrl: string): Promise<StemResult> {
+  async separate(sourceAudioUrl: string, _instrumentSpec?: InstrumentSpec): Promise<StemResult> {
     const jobId = generateId();
     const outputDir = path.join(process.cwd(), 'public', 'stems', jobId);
 
     const stems: Stem[] = STEM_ORDER.map((id) => {
       const cfg = STEM_CONFIGS[id];
-      const outputPath = path.join(outputDir, `${id}.mp3`);
-      generateStemMp3(
+      const outputPath = path.join(outputDir, `${id}.wav`);
+      generateStemWav(
         { ...cfg, durationSeconds: MOCK_DURATION, bpm: MOCK_BPM },
         outputPath
       );
-      return { id, label: STEM_LABELS[id], audioUrl: `/stems/${jobId}/${id}.mp3` };
+      return { id, label: STEM_LABELS[id], audioUrl: `/stems/${jobId}/${id}.wav` };
     });
 
     // Simulate processing latency after synthesis

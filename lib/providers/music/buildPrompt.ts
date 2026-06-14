@@ -140,6 +140,59 @@ function assemble(parts: string[]): string {
   return result;
 }
 
+/**
+ * Per-segment NARRATIVE prompt for ElevenLabs Sound Generation.
+ *
+ * Uses the same style as buildPrompt (works well with the sound-generation endpoint)
+ * but swaps in the segment's musicalDescription from Gemini microsegmentation as the
+ * centrepiece, and uses the segment's energy level / mood for the core line.
+ * Falls back to buildPrompt when the segment has no usable musical description.
+ */
+export function buildSegmentPrompt(result: AnalysisResult, segmentIndex: number): string {
+  const { analysis } = result;
+  const seg = analysis.timeline[segmentIndex];
+  if (!seg) return buildPrompt(result);
+
+  const {
+    genre, bpm, instrumentSuggestions,
+    colorPalette, settingType, sonicTexture, keyMode, musicRole,
+    audioDialogueDominant, soundTexture, volumeDynamics,
+  } = analysis;
+
+  const genreLabel = genre.charAt(0).toUpperCase() + genre.slice(1);
+  const instruments = instrumentSuggestions.slice(0, 3).join(', ');
+  const closing = MOOD_CLOSING[seg.mood] ?? 'Evocative and resonant.';
+  const keyStr = keyMode ? `, ${keyMode} key` : '';
+  const core = `${genreLabel} score, ${bpm} BPM, ${seg.energyLevel} energy${keyStr}.`;
+  const roleStr = musicRole ? MUSIC_ROLE_DESCRIPTOR[musicRole] ?? '' : '';
+
+  // Audio context — same signals as buildPrompt
+  const audioContextParts: string[] = [];
+  if (audioDialogueDominant) audioContextParts.push('understated — must not compete with spoken word');
+  if (soundTexture === 'sharp') audioContextParts.push('leave space for sharp audio transients');
+  else if (soundTexture === 'layered') audioContextParts.push('blend into a dense, layered audio environment');
+  else if (soundTexture === 'sparse') audioContextParts.push('minimal texture — sparse audio environment');
+  if (volumeDynamics === 'building') audioContextParts.push('mirror the building volume arc');
+  else if (volumeDynamics === 'erratic') audioContextParts.push('maintain steady underscoring through erratic audio changes');
+  else if (volumeDynamics === 'dropping') audioContextParts.push('gently fade alongside the dropping audio energy');
+  const audioContextStr = audioContextParts.length > 0 ? `Audio context: ${audioContextParts.join(', ')}.` : '';
+
+  // Path A: segment has a clean musical description — use it as centrepiece
+  if (seg.musicalDescription && !VISUAL_LEAK.test(seg.musicalDescription)) {
+    const parts = [core, roleStr, audioContextStr, seg.musicalDescription, `Features ${instruments}.`, closing];
+    return assemble(parts);
+  }
+
+  // Path B: no musical description — fall back to sonic texture / setting descriptors
+  const sonicParts: string[] = [];
+  if (sonicTexture && !VISUAL_LEAK.test(sonicTexture)) sonicParts.push(sonicTexture);
+  if (settingType && SETTING_SONIC[settingType]) sonicParts.push(SETTING_SONIC[settingType]);
+  if (colorPalette && PALETTE_SONIC[colorPalette]) sonicParts.push(PALETTE_SONIC[colorPalette]);
+  const sonic = sonicParts.length > 0 ? `Texture: ${sonicParts.join(', ')}.` : '';
+  const parts = [core, roleStr, audioContextStr, sonic, `Features ${instruments}.`, closing];
+  return assemble(parts);
+}
+
 export function buildTags(result: AnalysisResult): string[] {
   const { analysis } = result;
   return [
@@ -305,6 +358,83 @@ const GENRE_DEFAULT_DRUM: Partial<Record<string, DrumStyle>> = {
   'orchestral':    'orchestral-bass-drum',
   'cinematic':     'orchestral-bass-drum',
 };
+
+/**
+ * Per-segment backend prompt for microsegmentation-guided generation.
+ *
+ * Instrumentation (bass/drums/vocals/melody, BPM, key) is derived from the
+ * global analysis so it stays consistent across all segments — same instruments,
+ * same tonal centre, same groove. Only mood, energy level, DYN, and the
+ * per-segment musicalDescription (from Gemini's 12-category micro-analysis)
+ * change between segments, letting ElevenLabs know how each section should feel.
+ */
+export function buildSegmentBackendPrompt(result: AnalysisResult, segmentIndex: number): string {
+  const { analysis } = result;
+  const seg = analysis.timeline[segmentIndex];
+  if (!seg) return buildBackendPrompt(result).backendPrompt;
+
+  const {
+    genre, bpm, keyMode, energyLevel: globalEnergy,
+    drumsAppropriate, drumStyle: rawDrumStyle, vocalPresence: rawVocalPresence,
+    instrumentSuggestions, audioDialogueDominant, dynamicArc,
+  } = analysis;
+
+  // ── Instrument resolution — identical to buildBackendPrompt (global) ──────────
+  const resolvedDrumStyle: DrumStyle | null = (() => {
+    if (drumsAppropriate === false) return null;
+    if (rawDrumStyle && rawDrumStyle !== 'none') return rawDrumStyle;
+    if (rawDrumStyle === 'none') return null;
+    if (NO_DRUM_GENRES.has(genre)) return null;
+    return GENRE_DEFAULT_DRUM[genre] ?? 'acoustic-kit';
+  })();
+
+  const vocalPresence = rawVocalPresence ?? 'none';
+  const drumSpec  = resolvedDrumStyle ? DRUM_SPEC[resolvedDrumStyle] : null;
+  const bassSpec  = Object.prototype.hasOwnProperty.call(BASS_SPEC, genre)
+    ? BASS_SPEC[genre]
+    : BASS_SPEC['cinematic'];
+  const vocalSpec = VOCAL_SPEC[vocalPresence] ?? VOCAL_SPEC['none'];
+
+  const NON_MELODY_KEYS = new Set(['bass', 'bass guitar', 'choir', 'vocals', 'drums', 'drum kit']);
+  const melodyDescriptions = instrumentSuggestions
+    .filter(s => !NON_MELODY_KEYS.has(s.toLowerCase()))
+    .slice(0, 4)
+    .map(name => {
+      const t = MELODY_TRANSLATE[name.toLowerCase()];
+      return t === null ? null : (t ?? name);
+    })
+    .filter((s): s is string => s !== null);
+
+  // ── Segment-specific values ──────────────────────────────────────────────────
+  const genreDisplay = GENRE_DISPLAY[genre] ?? genre;
+  const keyStr = keyMode ?? (globalEnergy === 'high' ? 'major' : 'minor');
+
+  const dynLine = seg.energyLevel === 'low'  ? 'pp, subtle'
+    : seg.energyLevel === 'high' ? 'mp to ff climax'
+    : dynamicArc ?? 'steady mf';
+
+  // Micro-segmentation musical description — the richest signal from Gemini analysis.
+  // Falls back to a plain mood/energy label when Gemini didn't return a description.
+  const role = seg.narrativeRole
+    ?? (segmentIndex === 0 ? 'intro'
+      : segmentIndex === analysis.timeline.length - 1 ? 'outro'
+      : 'mid');
+  const segDesc = seg.musicalDescription && !VISUAL_LEAK.test(seg.musicalDescription)
+    ? `[${role}] ${seg.musicalDescription}`
+    : `[${role}] ${seg.mood}, ${seg.energyLevel} energy`;
+
+  return assembleBackend([
+    `[BPM:${bpm}|KEY:${keyStr}]`,
+    `${genreDisplay}, ${seg.mood}, ${seg.energyLevel} energy`,
+    bassSpec    ? `BASS: ${bassSpec.description}`                    : null,
+    drumSpec?.description ? `DRUMS: ${drumSpec.description}`         : null,
+    vocalSpec.description ? `VOCALS: ${vocalSpec.description}`       : null,
+    melodyDescriptions.length > 0 ? `MELODY: ${melodyDescriptions.join(', ')}` : null,
+    audioDialogueDominant ? 'NOTE: understated, must not compete with dialogue' : null,
+    `DYN: ${dynLine}`,
+    segDesc,
+  ]);
+}
 
 export function buildBackendPrompt(result: AnalysisResult): {
   backendPrompt: string;

@@ -15,18 +15,6 @@ import type {
   AudioEnergyLevel,
   MusicRole,
   VideoContextType,
-  MicroSegmentScores,
-  SegmentationScores,
-  VisualQualityScores,
-  SubjectAnalysisScores,
-  MotionAnalysisScores,
-  SceneUnderstandingScores,
-  AttentionEngagementScores,
-  TaskSpecificScores,
-  AudioAnalysisScores,
-  ConfidenceScores,
-  SafetyScores,
-  FinalOutputScores,
   AudioContentType,
   DialogueTone,
   DialogueSentiment,
@@ -151,7 +139,25 @@ const MIME_MAP: Record<string, string> = {
   webm: 'video/webm',
 };
 
-const ANALYSIS_PROMPT = `Analyze this video carefully and return ONLY a raw JSON object — no markdown fences, no explanation.
+/**
+ * Builds the Gemini analysis prompt with a segment duration cap tuned to the
+ * video length. Short clips need finer granularity (smaller cap → more sections
+ * to give ElevenLabs Music distinct directional briefs). Long clips need larger
+ * blocks so sustained moods aren't over-subdivided into musically incoherent
+ * micro-sections that exhaust the Music API's context.
+ *
+ *  < 45 s  → 12 s cap   (short-form: maximise per-section richness)
+ *  45-90 s → 20 s cap   (medium: balanced granularity)
+ *  > 90 s  → 30 s cap   (long-form: coherent musical blocks)
+ */
+function buildAnalysisPrompt(estimatedDurationSeconds?: number): string {
+  const dur = estimatedDurationSeconds ?? 60;
+  const segCap = dur < 45 ? 12 : dur <= 90 ? 20 : 30;
+  return buildAnalysisPromptText(segCap);
+}
+
+function buildAnalysisPromptText(segCap: number): string {
+  return `Analyze this video carefully and return ONLY a raw JSON object — no markdown fences, no explanation.
 
 {
   "videoDurationSeconds": <total video duration as a number>,
@@ -178,7 +184,6 @@ const ANALYSIS_PROMPT = `Analyze this video carefully and return ONLY a raw JSON
   "audioEnergyLevel": "<silent | quiet | moderate | loud — overall prominence of existing audio in the video>",
   "musicRole": "<background-underscore | featured-score | sync-to-action | ambient-complement — how the composed score should relate to the existing audio: background-underscore if audio is loud/prominent (score sits quietly underneath), featured-score if audio is silent/quiet (score takes centre stage), sync-to-action if there are sound effects to hit (score syncs to beats), ambient-complement if there is ambient or natural sound (score enhances without competing)>",
   "contextType": "<sports | dance | product-video | security-footage | social-media | interview-reaction | general — primary detected use-case of this video>",
-  "overallVideoScore": <0.0-1.0 quality score averaged across all segment finalOutputs.finalClipScore values>,
   "audioContentTypes": ["<dialogue | sound_effects | background_music | ambient | silence>"] (array — include every type present; may have multiple),
   "dialogueTone": "<formal | casual | emotional | tense | upbeat> — ONLY include when dialogue is present, otherwise omit this field",
   "dialogueSentiment": "<positive | neutral | negative | mixed> — ONLY include when dialogue is present, otherwise omit this field",
@@ -198,22 +203,7 @@ const ANALYSIS_PROMPT = `Analyze this video carefully and return ONLY a raw JSON
       "narrativeRole": "<intro | rising action | climax | falling action | resolution — where this segment sits in the overall emotional arc>",
       "musicalDescription": "<MUSIC ONLY — 6-12 words: specific instrument(s) with playing technique, dynamic marking (pp/p/mp/mf/f/ff/fff), and emotional texture for THIS segment only. e.g. 'legato violin section, pp, hushed and introspective with warm cello counterpoint' or 'full brass choir, fff, bold staccato fanfare with driving timpani' or 'solo piano, mf, flowing arpeggios, tender and searching'. Never reference visuals.>",
       "transitionToNext": "<4-8 words on the exact musical boundary motion from THIS segment to the NEXT — describe how the score dynamically shifts at this moment: e.g. 'strings swell to fortissimo climax', 'sudden drop to silence then re-entry', 'gradual ritardando and decrescendo', 'key modulation up a perfect fifth', 'tempo doubles into driving pulse'. null for the final segment>",
-      "audioNote": "<optional 5-10 words describing the dominant audio event in this segment — e.g. 'sharp impacts and crowd noise', 'quiet dialogue', 'silence', 'swelling background music'>",
-      "valence": <float 0.0-1.0 — emotional positivity: 0.0=very negative/dark/sad, 0.5=neutral/ambiguous, 1.0=very positive/uplifting/joyful>,
-      "arousal": <float 0.0-1.0 — energy/intensity: 0.0=very calm/still/sleepy, 0.5=moderate alertness, 1.0=extremely energetic/intense/excited>,
-      "microScores": {
-        "segmentation": { "shotChanges": <f>, "sceneChanges": <f>, "actionStartTime": <f>, "actionPeakTime": <f>, "actionEndTime": <f>, "segmentOverlap": <f> },
-        "visualQuality": { "sharpness": <f>, "focusQuality": <f>, "exposure": <f>, "contrast": <f>, "brightnessStability": <f>, "colorBalance": <f>, "saturation": <f>, "noiseLevel": <f>, "compressionArtifacts": <f>, "motionBlur": <f>, "flicker": <f>, "distortion": <f> },
-        "subjectAnalysis": { "primarySubjectDetected": <f>, "secondarySubjectCount": <f>, "objectCount": <f>, "subjectVisibility": <f>, "occlusionLevel": <f>, "faceVisibility": <f>, "bodyVisibility": <f>, "objectRelevance": <f>, "subjectSizeInFrame": <f>, "subjectCentering": <f> },
-        "motionAnalysis": { "globalMotionIntensity": <f>, "localMotionIntensity": <f>, "cameraShake": <f>, "motionSmoothness": <f>, "motionDirectionConsistency": <f>, "movementSpeed": <f>, "movementPrecision": <f>, "movementSymmetry": <f>, "jerkiness": <f>, "trajectoryCoherence": <f> },
-        "sceneUnderstanding": { "sceneCategory": "<string>", "environmentType": "<string>", "indoorOutdoor": "<indoor|outdoor|mixed>", "activityType": "<string>", "actionComplexity": <f>, "eventDensity": <f>, "eventSalience": <f>, "sceneContextConsistency": <f>, "narrativeCoherence": <f>, "causeEffectClarity": <f> },
-        "attentionEngagement": { "hookStrength": <f>, "visualInterest": <f>, "pacing": <f>, "retentionPotential": <f>, "novelty": <f>, "emotionalImpact": <f>, "memorability": <f>, "scrollStoppingPower": <f>, "rewatchability": <f>, "energyLevel": <f> },
-        "taskSpecific": { "taskRelevance": <f>, "classificationAccuracy": <f>, "techniqueQuality": <f>, "timingAccuracy": <f>, "completionQuality": <f>, "successProbability": <f>, "goalAlignment": <f>, "rankingScore": <f> },
-        "audio": { "speechPresence": <f>, "speechClarity": <f>, "backgroundNoiseLevel": <f>, "musicPresence": <f>, "soundEffectPresence": <f>, "audioVisualSync": <f>, "rhythmAlignment": <f>, "toneMatch": <f> },
-        "confidence": { "modelConfidence": <f>, "predictionEntropy": <f>, "ambiguityScore": <f>, "missingDataRate": <f>, "boundaryConfidence": <f>, "crossFrameConsistency": <f>, "reliabilityScore": <f> },
-        "safety": { "nsfwRisk": <f>, "violenceRisk": <f>, "privacyRisk": <f>, "harmfulContentRisk": <f>, "illegalContentRisk": <f>, "faceSensitivity": <f>, "moderationPenalty": <f> },
-        "finalOutputs": { "segmentScore": <f>, "eventScore": <f>, "technicalScore": <f>, "aestheticScore": <f>, "engagementScore": <f>, "taskScore": <f>, "penaltyScore": <f>, "confidenceAdjustedScore": <f>, "finalClipScore": <f> }
-      }
+      "audioNote": "<optional 5-10 words describing the dominant audio event in this segment — e.g. 'sharp impacts and crowd noise', 'quiet dialogue', 'silence', 'swelling background music'>"
     }
   ]
 }
@@ -221,8 +211,8 @@ const ANALYSIS_PROMPT = `Analyze this video carefully and return ONLY a raw JSON
 Rules:
 - timeline must reflect genuine mood, energy, or setting transitions — never create arbitrary time-based segments
 - timeline must have 3-10 segments that together span 0 to videoDurationSeconds with no gaps
-- Target segment duration of 3-20 seconds each; shorter for rapid transitions, longer for sustained moods
-- No segment may exceed 20 seconds — if a mood or energy level sustains beyond 20 seconds, subdivide it at a natural musical phrase boundary (e.g. after a bar resolution, at a harmonic pivot, or at a dynamic shift), giving each sub-segment a slightly different musicalDescription reflecting its position in the sustained mood
+- Target segment duration of 3-${segCap} seconds each; shorter for rapid transitions, longer for sustained moods
+- No segment may exceed ${segCap} seconds — if a mood or energy level sustains beyond ${segCap} seconds, subdivide it at a natural musical phrase boundary (e.g. after a bar resolution, at a harmonic pivot, or at a dynamic shift), giving each sub-segment a slightly different musicalDescription reflecting its position in the sustained mood
 - Each segment endSeconds equals the next segment startSeconds; the last endSeconds equals videoDurationSeconds
 - bpm: low energy → 60-90, medium → 90-120, high → 120-160
 - colorPalette: observe the dominant grade — warm (golden/amber/red tones), cool (blue/teal), dark (low-key/shadows), bright (high-key/saturated), neutral (balanced/desaturated)
@@ -241,13 +231,6 @@ Rules:
 - musicalDescription: MUSIC ONLY per segment — act as a film score composer writing a brief for a session musician. Include: (1) specific instrument(s) with playing style/technique, (2) dynamic marking (pp/p/mp/mf/f/ff/fff), (3) emotional quality or textural character. 6-12 words. Absolutely no visual references
 - transitionToNext: describe the precise musical gesture at the boundary between this segment and the next. Include dynamic direction, tempo change, harmonic shift, or articulation change. 4-8 words. Must be musically specific and actionable (e.g. not just 'crescendo' but 'strings build to fortissimo over 4 beats'). null for the final segment
 - contextType: detect primary use-case — sports (athletic/competitive), dance (choreographed movement), product-video (commercial showcase), security-footage (surveillance/monitoring), social-media (short-form entertainment), interview-reaction (talking head/reaction/interview), general (other)
-- overallVideoScore: 0.0-1.0 — simple average of all segment finalOutputs.finalClipScore values
-- microScores: analyze EVERY segment across all 11 categories; all numeric fields are floats 0.0-1.0 unless noted
-- Positive-sense fields (1.0 = best): sharpness, focusQuality, exposure, contrast, brightnessStability, colorBalance, saturation, primarySubjectDetected, secondarySubjectCount, objectCount, subjectVisibility, faceVisibility, bodyVisibility, objectRelevance, subjectSizeInFrame, subjectCentering, globalMotionIntensity, localMotionIntensity, motionSmoothness, motionDirectionConsistency, movementSpeed, movementPrecision, movementSymmetry, trajectoryCoherence, actionComplexity, eventDensity, eventSalience, sceneContextConsistency, narrativeCoherence, causeEffectClarity, hookStrength, visualInterest, pacing, retentionPotential, novelty, emotionalImpact, memorability, scrollStoppingPower, rewatchability, energyLevel (attentionEngagement), all taskSpecific fields, speechPresence, speechClarity, musicPresence, soundEffectPresence, audioVisualSync, rhythmAlignment, toneMatch, modelConfidence, boundaryConfidence, crossFrameConsistency, reliabilityScore, all finalOutputs fields except penaltyScore
-- Negative-sense fields (0.0 = none of the problem, 1.0 = worst): noiseLevel, compressionArtifacts (visualQuality), motionBlur, flicker, distortion, occlusionLevel (subjectAnalysis), cameraShake, jerkiness, backgroundNoiseLevel, predictionEntropy, ambiguityScore, missingDataRate, ALL safety fields (nsfwRisk, violenceRisk, privacyRisk, harmfulContentRisk, illegalContentRisk, faceSensitivity, moderationPenalty), penaltyScore (finalOutputs)
-- segmentation fields: shotChanges and sceneChanges are density scores 0-1 (0=none, 1=high density); actionStartTime/actionPeakTime/actionEndTime are relative timestamps within the segment 0-1; segmentOverlap is continuity quality 0-1
-- sceneUnderstanding strings: sceneCategory (e.g. "action", "dialogue", "landscape"), environmentType (e.g. "stadium", "office", "street"), indoorOutdoor ("indoor" | "outdoor" | "mixed"), activityType (primary observed activity)
-- finalOutputs: compute segmentScore from segmentation quality; eventScore from scene salience and event density; technicalScore from visualQuality and confidence; aestheticScore from subjectAnalysis and visual quality; engagementScore from attentionEngagement; taskScore from taskSpecific; penaltyScore from safety.moderationPenalty; confidenceAdjustedScore = weighted composite × confidence.modelConfidence; finalClipScore = confidenceAdjustedScore × (1 − penaltyScore)
 - audioContentTypes: identify ALL audio content types present — dialogue (spoken words), sound_effects (non-music events like impacts, doors, nature sounds), background_music (pre-existing music in the video), ambient (environmental noise like wind, room tone, crowd), silence (portions with no audio); include every type that appears
 - dialogueTone and dialogueSentiment: ONLY populate these when dialogue is actually audible. dialogueTone describes the manner of speaking; dialogueSentiment describes the emotional valence of what is being said
 - soundTexture: evaluate the character of transient audio events (sound effects, impacts, voices) — sharp = sudden high-frequency transients, blunt = heavy low-frequency impacts, soft = gentle understated sounds, layered = many audio sources simultaneously, sparse = isolated sounds with notable silence between them
@@ -257,154 +240,7 @@ Rules:
 - genre: choose the single best-fit genre from the full list — lo-fi-hip-hop for mellow study/chill content; hip-hop for rap/urban; pop for mainstream catchy content; rock/indie/punk for guitar-driven energy; folk/acoustic for unplugged intimate content; blues for soulful slow content; r-and-b for smooth groove; jazz for swing/bebop; electronic/dance for synth-driven beats; classical for formal concert-hall; orchestral for large ensemble film style; cinematic for dramatic film-score feel; ambient for slow atmospheric; world for non-Western cultural music; default to cinematic only for genuinely dramatic filmic content
 - drumsAppropriate: true for hip-hop, pop, rock, indie, blues, r-and-b, jazz, electronic, dance, world, punk, cinematic with accents, orchestral with accents; false for classical solo, pure ambient, intimate acoustic-only, and soundscapes without any rhythm section
 - drumStyle: must match the genre — lo-fi-compressed for lo-fi-hip-hop; electronic-808 for hip-hop/electronic/dance; acoustic-kit for pop/rock/indie/blues/r-and-b; brushed-jazz for jazz; orchestral-bass-drum for orchestral/cinematic only on structural accents; none when drumsAppropriate is false
-- vocalPresence: default to none for all genres except when the content specifically warrants human vocal elements; choir-pads reserved for genuinely triumphant/transcendent orchestral climaxes; backing-harmonies for pop/folk/indie with clear emotional warmth; vocal-chops for electronic/hip-hop only; humming for quiet intimate introspection; scat for jazz; when uncertain choose none
-- valence per segment: 0.9 = graduation ceremony, celebration, sunrise; 0.7 = pleasant walk, gentle happiness; 0.5 = neutral commute, ambiguous scene; 0.3 = argument, disappointment; 0.1 = grief, horror, despair
-- arousal per segment: 0.9 = car chase, sports climax, crowd explosion; 0.7 = brisk activity, energetic montage; 0.5 = normal conversation, moderate pace; 0.3 = slow walk, quiet office; 0.1 = meditation, sleeping, still landscape`;
-
-function parseMicroScores(raw: unknown): MicroSegmentScores | undefined {
-  if (!raw || typeof raw !== 'object') return undefined;
-  const m = raw as Record<string, unknown>;
-  const sub = (key: string) => (m[key] && typeof m[key] === 'object' ? m[key] : {}) as Record<string, unknown>;
-  const f = (v: unknown, d: number) => Math.min(1, Math.max(0, typeof v === 'number' ? v : d));
-  const s = (v: unknown, fallback: string) => typeof v === 'string' && v ? v : fallback;
-
-  const sg = sub('segmentation');
-  const vq = sub('visualQuality');
-  const sa = sub('subjectAnalysis');
-  const ma = sub('motionAnalysis');
-  const su = sub('sceneUnderstanding');
-  const ae = sub('attentionEngagement');
-  const ts = sub('taskSpecific');
-  const au = sub('audio');
-  const co = sub('confidence');
-  const sf = sub('safety');
-  const fo = sub('finalOutputs');
-
-  const segmentation: SegmentationScores = {
-    shotChanges: f(sg.shotChanges, 0.5),
-    sceneChanges: f(sg.sceneChanges, 0.4),
-    actionStartTime: f(sg.actionStartTime, 0.1),
-    actionPeakTime: f(sg.actionPeakTime, 0.5),
-    actionEndTime: f(sg.actionEndTime, 0.9),
-    segmentOverlap: f(sg.segmentOverlap, 0.3),
-  };
-  const visualQuality: VisualQualityScores = {
-    sharpness: f(vq.sharpness, 0.72),
-    focusQuality: f(vq.focusQuality, 0.72),
-    exposure: f(vq.exposure, 0.70),
-    contrast: f(vq.contrast, 0.65),
-    brightnessStability: f(vq.brightnessStability, 0.78),
-    colorBalance: f(vq.colorBalance, 0.70),
-    saturation: f(vq.saturation, 0.65),
-    noiseLevel: f(vq.noiseLevel, 0.15),
-    compressionArtifacts: f(vq.compressionArtifacts, 0.12),
-    motionBlur: f(vq.motionBlur, 0.12),
-    flicker: f(vq.flicker, 0.08),
-    distortion: f(vq.distortion, 0.07),
-  };
-  const subjectAnalysis: SubjectAnalysisScores = {
-    primarySubjectDetected: f(sa.primarySubjectDetected, 0.85),
-    secondarySubjectCount: f(sa.secondarySubjectCount, 0.40),
-    objectCount: f(sa.objectCount, 0.50),
-    subjectVisibility: f(sa.subjectVisibility, 0.72),
-    occlusionLevel: f(sa.occlusionLevel, 0.18),
-    faceVisibility: f(sa.faceVisibility, 0.40),
-    bodyVisibility: f(sa.bodyVisibility, 0.55),
-    objectRelevance: f(sa.objectRelevance, 0.68),
-    subjectSizeInFrame: f(sa.subjectSizeInFrame, 0.60),
-    subjectCentering: f(sa.subjectCentering, 0.62),
-  };
-  const motionAnalysis: MotionAnalysisScores = {
-    globalMotionIntensity: f(ma.globalMotionIntensity, 0.45),
-    localMotionIntensity: f(ma.localMotionIntensity, 0.40),
-    cameraShake: f(ma.cameraShake, 0.14),
-    motionSmoothness: f(ma.motionSmoothness, 0.68),
-    motionDirectionConsistency: f(ma.motionDirectionConsistency, 0.72),
-    movementSpeed: f(ma.movementSpeed, 0.45),
-    movementPrecision: f(ma.movementPrecision, 0.65),
-    movementSymmetry: f(ma.movementSymmetry, 0.58),
-    jerkiness: f(ma.jerkiness, 0.12),
-    trajectoryCoherence: f(ma.trajectoryCoherence, 0.70),
-  };
-  const sceneUnderstanding: SceneUnderstandingScores = {
-    sceneCategory: s(su.sceneCategory, 'general'),
-    environmentType: s(su.environmentType, 'unknown'),
-    indoorOutdoor: s(su.indoorOutdoor, 'mixed'),
-    activityType: s(su.activityType, 'general activity'),
-    actionComplexity: f(su.actionComplexity, 0.55),
-    eventDensity: f(su.eventDensity, 0.50),
-    eventSalience: f(su.eventSalience, 0.60),
-    sceneContextConsistency: f(su.sceneContextConsistency, 0.72),
-    narrativeCoherence: f(su.narrativeCoherence, 0.68),
-    causeEffectClarity: f(su.causeEffectClarity, 0.60),
-  };
-  const attentionEngagement: AttentionEngagementScores = {
-    hookStrength: f(ae.hookStrength, 0.55),
-    visualInterest: f(ae.visualInterest, 0.62),
-    pacing: f(ae.pacing, 0.64),
-    retentionPotential: f(ae.retentionPotential, 0.60),
-    novelty: f(ae.novelty, 0.58),
-    emotionalImpact: f(ae.emotionalImpact, 0.62),
-    memorability: f(ae.memorability, 0.55),
-    scrollStoppingPower: f(ae.scrollStoppingPower, 0.52),
-    rewatchability: f(ae.rewatchability, 0.50),
-    energyLevel: f(ae.energyLevel, 0.55),
-  };
-  const taskSpecific: TaskSpecificScores = {
-    taskRelevance: f(ts.taskRelevance, 0.68),
-    classificationAccuracy: f(ts.classificationAccuracy, 0.72),
-    techniqueQuality: f(ts.techniqueQuality, 0.68),
-    timingAccuracy: f(ts.timingAccuracy, 0.65),
-    completionQuality: f(ts.completionQuality, 0.70),
-    successProbability: f(ts.successProbability, 0.65),
-    goalAlignment: f(ts.goalAlignment, 0.68),
-    rankingScore: f(ts.rankingScore, 0.60),
-  };
-  const audio: AudioAnalysisScores = {
-    speechPresence: f(au.speechPresence, 0.30),
-    speechClarity: f(au.speechClarity, 0.65),
-    backgroundNoiseLevel: f(au.backgroundNoiseLevel, 0.20),
-    musicPresence: f(au.musicPresence, 0.35),
-    soundEffectPresence: f(au.soundEffectPresence, 0.25),
-    audioVisualSync: f(au.audioVisualSync, 0.72),
-    rhythmAlignment: f(au.rhythmAlignment, 0.65),
-    toneMatch: f(au.toneMatch, 0.68),
-  };
-  const confidence: ConfidenceScores = {
-    modelConfidence: f(co.modelConfidence, 0.75),
-    predictionEntropy: f(co.predictionEntropy, 0.25),
-    ambiguityScore: f(co.ambiguityScore, 0.20),
-    missingDataRate: f(co.missingDataRate, 0.10),
-    boundaryConfidence: f(co.boundaryConfidence, 0.70),
-    crossFrameConsistency: f(co.crossFrameConsistency, 0.75),
-    reliabilityScore: f(co.reliabilityScore, 0.72),
-  };
-  const safety: SafetyScores = {
-    nsfwRisk: f(sf.nsfwRisk, 0.02),
-    violenceRisk: f(sf.violenceRisk, 0.04),
-    privacyRisk: f(sf.privacyRisk, 0.05),
-    harmfulContentRisk: f(sf.harmfulContentRisk, 0.02),
-    illegalContentRisk: f(sf.illegalContentRisk, 0.01),
-    faceSensitivity: f(sf.faceSensitivity, 0.30),
-    moderationPenalty: f(sf.moderationPenalty, 0.02),
-  };
-  const finalOutputs: FinalOutputScores = {
-    segmentScore: f(fo.segmentScore, 0.65),
-    eventScore: f(fo.eventScore, 0.62),
-    technicalScore: f(fo.technicalScore, 0.70),
-    aestheticScore: f(fo.aestheticScore, 0.67),
-    engagementScore: f(fo.engagementScore, 0.62),
-    taskScore: f(fo.taskScore, 0.65),
-    penaltyScore: f(fo.penaltyScore, 0.02),
-    confidenceAdjustedScore: f(fo.confidenceAdjustedScore, 0.65),
-    finalClipScore: f(fo.finalClipScore, 0.65),
-  };
-
-  return {
-    segmentation, visualQuality, subjectAnalysis, motionAnalysis,
-    sceneUnderstanding, attentionEngagement, taskSpecific, audio,
-    confidence, safety, finalOutputs,
-  };
+- vocalPresence: default to none for all genres except when the content specifically warrants human vocal elements; choir-pads reserved for genuinely triumphant/transcendent orchestral climaxes; backing-harmonies for pop/folk/indie with clear emotional warmth; vocal-chops for electronic/hip-hop only; humming for quiet intimate introspection; scat for jazz; when uncertain choose none`;
 }
 
 export class GeminiAnalyzer implements VideoAnalysisProvider {
@@ -443,7 +279,8 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
       throw new Error(`Gemini video processing failed (state: ${file.state}). Try again.`);
     }
 
-    const response = await this.generateWithRetry(file.uri!, file.mimeType!);
+    const prompt = buildAnalysisPrompt(metadata.durationSeconds);
+    const response = await this.generateWithRetry(file.uri!, file.mimeType!, prompt);
 
     // Clean up uploaded file (best-effort)
     this.ai.files.delete({ name: file.name! }).catch(() => undefined);
@@ -454,7 +291,7 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
     return { videoPath, metadata, analysis };
   }
 
-  private async generateWithRetry(fileUri: string, fileMimeType: string) {
+  private async generateWithRetry(fileUri: string, fileMimeType: string, prompt: string) {
     const maxAttempts = 4;
     let lastError: unknown;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -469,7 +306,7 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
           },
           contents: createUserContent([
             createPartFromUri(fileUri, fileMimeType),
-            ANALYSIS_PROMPT,
+            prompt,
           ]),
         });
       } catch (err) {
@@ -544,9 +381,6 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
       audioEnergyLevel: toAudioEnergyLevel(parsed.audioEnergyLevel),
       musicRole: toMusicRole(parsed.musicRole),
       contextType: toContextType(parsed.contextType),
-      overallVideoScore: typeof parsed.overallVideoScore === 'number'
-        ? Math.min(1, Math.max(0, parsed.overallVideoScore))
-        : undefined,
       audioContentTypes: toAudioContentTypes(parsed.audioContentTypes),
       dialogueTone: toDialogueTone(parsed.dialogueTone),
       dialogueSentiment: toDialogueSentiment(parsed.dialogueSentiment),
@@ -587,8 +421,6 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
       const narrativeRole = typeof seg.narrativeRole === 'string' && VALID_NARRATIVE_ROLES.includes(seg.narrativeRole)
         ? seg.narrativeRole
         : undefined;
-      const rawValence = toNumber(seg.valence, -1);
-      const rawArousal = toNumber(seg.arousal, -1);
 
       return {
         startSeconds: toNumber(seg.startSeconds, 0),
@@ -600,9 +432,6 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
         transitionToNext,
         narrativeRole,
         audioNote: typeof seg.audioNote === 'string' && seg.audioNote ? seg.audioNote : undefined,
-        valence: rawValence >= 0 && rawValence <= 1 ? Math.round(rawValence * 100) / 100 : undefined,
-        arousal: rawArousal >= 0 && rawArousal <= 1 ? Math.round(rawArousal * 100) / 100 : undefined,
-        microScores: parseMicroScores(seg.microScores),
       };
     });
 

@@ -33,6 +33,27 @@ function clean(s?: string): string | undefined {
   return t.length > MAX_STYLE_CHARS ? t.slice(0, MAX_STYLE_CHARS) : t;
 }
 
+/**
+ * Splits a long style string into ≤2 chunks at a natural comma/semicolon
+ * boundary so both pieces stay within MAX_STYLE_CHARS. Used for the
+ * musicalRecommendation field which can exceed 100 chars.
+ */
+function splitStyle(s: string): string[] {
+  if (s.length <= MAX_STYLE_CHARS) return [s];
+  const mid = Math.floor(s.length / 2);
+  const commaIdx = s.lastIndexOf(',', mid);
+  const semiIdx = s.lastIndexOf(';', mid);
+  const splitAt = Math.max(commaIdx, semiIdx);
+  if (splitAt > 10) {
+    const a = s.slice(0, splitAt).trim();
+    const b = s.slice(splitAt + 1).trim();
+    if (a.length <= MAX_STYLE_CHARS && b.length <= MAX_STYLE_CHARS && b.length > 0) {
+      return [a, b];
+    }
+  }
+  return [s.slice(0, MAX_STYLE_CHARS)];
+}
+
 function clamp(n: number, lo: number, hi: number): number {
   return Math.min(hi, Math.max(lo, n));
 }
@@ -152,7 +173,9 @@ export function buildCompositionPlan(result: AnalysisResult): CompositionPlan {
           : i === peakIdx
             ? 'full arrangement, climactic'
             : undefined;
-    return buildSection(b.seg, b.durationMs, posHint, i);
+    // transitionToNext from the previous block tells this section how it arrives musically.
+    const incomingTransition = i > 0 ? blocks[i - 1].seg.transitionToNext : undefined;
+    return buildSection(b.seg, b.durationMs, posHint, i, incomingTransition);
   });
 
   return {
@@ -164,6 +187,12 @@ export function buildCompositionPlan(result: AnalysisResult): CompositionPlan {
 
 /** Track-wide musical direction derived from the overall analysis. */
 function buildGlobalStyles(a: VideoAnalysis): { positive: string[]; negative: string[] } {
+  // musicalRecommendation and sonicTexture can exceed 100 chars — split at a natural boundary.
+  const recParts = a.musicalRecommendation
+    ? splitStyle(a.musicalRecommendation).filter(p => !VISUAL_LEAK.test(p))
+    : [];
+  const texPart = clean(a.sonicTexture);
+
   const positive = dedupe([
     a.genre,
     a.mood,
@@ -171,11 +200,18 @@ function buildGlobalStyles(a: VideoAnalysis): { positive: string[]; negative: st
     a.keyMode ? `${a.keyMode} key` : '',
     `${a.pace} pace`,
     ...a.instrumentSuggestions.slice(0, 4),
-    clean(a.sonicTexture) ?? '',
-    clean(a.musicalRecommendation) ?? '',
+    // Drum and vocal style from Gemini's per-video recommendations
+    a.drumsAppropriate && a.drumStyle && a.drumStyle !== 'none'
+      ? a.drumStyle.replace(/-/g, ' ')
+      : '',
+    a.vocalPresence && a.vocalPresence !== 'none'
+      ? a.vocalPresence.replace(/-/g, ' ')
+      : '',
+    texPart ?? '',
+    ...recParts,
     clean(a.rhythmicFeel) ?? '',
     clean(a.dynamicArc) ?? '',
-  ]).slice(0, MAX_GLOBAL_STYLES);
+  ]).filter(Boolean).slice(0, MAX_GLOBAL_STYLES);
 
   // Always instrumental; add contextual avoidances.
   const negative = ['vocals', 'lyrics', 'spoken word'];
@@ -185,20 +221,67 @@ function buildGlobalStyles(a: VideoAnalysis): { positive: string[]; negative: st
   if (a.mood === 'calm' || a.energyLevel === 'low') {
     negative.push('harsh distortion', 'aggressive percussion');
   }
+  if (a.drumsAppropriate === false) {
+    negative.push('drums', 'percussion');
+  }
 
   return { positive, negative: dedupe(negative) };
 }
+
+// Maps narrativeRole to a compositional intent hint for the Music API.
+const ROLE_HINT: Record<string, string> = {
+  'intro':          'gentle introduction',
+  'rising action':  'building intensity',
+  'climax':         'full arrangement, climactic peak',
+  'falling action': 'easing tension',
+  'resolution':     'resolving, settling cadence',
+};
 
 function buildSection(
   seg: TimelineSegment,
   durationMs: number,
   posHint: string | undefined,
-  i: number
+  i: number,
+  incomingTransition?: string,
 ): MusicSection {
   const name = (seg.label?.trim() ? seg.label.trim() : `Section ${i + 1} — ${seg.mood}`).slice(0, MAX_NAME_CHARS);
+
+  const localStyles: string[] = [];
+
+  // Primary: Gemini's per-segment musical brief (instrument, technique, dynamic, texture).
+  // e.g. "legato violin section, pp, hushed and introspective with warm cello counterpoint"
+  const desc = seg.musicalDescription ? clean(seg.musicalDescription) : undefined;
+  if (desc) {
+    localStyles.push(desc);
+  } else {
+    localStyles.push(seg.mood, `${seg.energyLevel} energy`);
+  }
+
+  // Narrative role → compositional intent (climax, intro, resolution, etc.)
+  if (seg.narrativeRole && ROLE_HINT[seg.narrativeRole]) {
+    localStyles.push(ROLE_HINT[seg.narrativeRole]);
+  }
+
+  // Incoming transition: how the previous section ended informs how this one begins.
+  // e.g. "strings swell to fortissimo climax" arriving into a high-energy section.
+  if (incomingTransition) {
+    const t = clean(incomingTransition);
+    if (t) localStyles.push(t);
+  }
+
+  // Outgoing transition: the musical gesture this section makes as it moves to the next.
+  // e.g. "gradual ritardando and decrescendo" — tells ElevenLabs how the section should end.
+  if (seg.transitionToNext) {
+    const t = clean(seg.transitionToNext);
+    if (t) localStyles.push(t);
+  }
+
+  // Position hint (first-section softness / peak climax / final resolution)
+  if (posHint) localStyles.push(posHint);
+
   return {
     section_name: name,
-    positive_local_styles: dedupe([seg.mood, `${seg.energyLevel} energy`, ...(posHint ? [posHint] : [])]),
+    positive_local_styles: dedupe(localStyles),
     negative_local_styles: [],
     duration_ms: Math.round(durationMs),
     lines: [],
