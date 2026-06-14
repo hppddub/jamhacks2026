@@ -193,6 +193,7 @@ export function DAW({ seedItems, savedState = null, projectId, projectName, back
             project={project}
             currentTime={currentTime}
             pxPerSecond={pxPerSecond}
+            timelineDuration={daw.timelineDurationSeconds}
             toolMode={toolMode}
             onSeek={daw.seek}
             onMoveClip={daw.moveClip}

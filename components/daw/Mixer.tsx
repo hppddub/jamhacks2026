@@ -190,17 +190,17 @@ function EffectRack({
               {eff.type === 'filter-adsr' ? (
                 <AdsrEffectBody insert={insert} eff={eff} onUpdateEffectParam={onUpdateEffectParam} />
               ) : (
-                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                <div className="flex flex-col gap-1.5">
                   {specs.map(([key, label, min, max, step]) => (
-                    <label key={key} className="flex items-center gap-1.5">
-                      <span className="w-8 flex-shrink-0 text-[9px] text-cream-500">{label}</span>
+                    <label key={key} className="flex items-center gap-2">
+                      <span className="w-12 flex-shrink-0 text-[9px] text-cream-500">{label}</span>
                       <input
                         type="range" min={min} max={max} step={step} value={eff.params[key]}
                         onChange={e => onUpdateEffectParam(insert.id, eff.id, key, parseFloat(e.target.value))}
-                        className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-navy-700 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#ffcc18]"
+                        className="h-1 min-w-0 flex-1 cursor-pointer appearance-none rounded-full bg-navy-700 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#ffcc18]"
                       />
-                      <span className="w-8 flex-shrink-0 text-right text-[9px] tabular-nums text-cream-400">
-                        {eff.params[key]}
+                      <span className="w-12 flex-shrink-0 text-right text-[9px] tabular-nums text-cream-300">
+                        {parseFloat(eff.params[key].toFixed(3))}
                       </span>
                     </label>
                   ))}
