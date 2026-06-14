@@ -11,7 +11,7 @@ export function InfoTooltip({ label }: { label: string }) {
       <button
         type="button"
         aria-label={label}
-        className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-cream-400/50 text-[9px] font-bold leading-none text-cream-400 transition-colors hover:border-[#ffcc18] hover:text-[#ffcc18] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffcc18]"
+        className="flex h-3.5 w-3.5 items-center justify-center rounded-full border border-cream-400/50 text-[9px] font-bold leading-none text-cream-400 transition-colors hover:border-[#ffcc18] hover:text-gold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#ffcc18]"
       >
         ?
       </button>

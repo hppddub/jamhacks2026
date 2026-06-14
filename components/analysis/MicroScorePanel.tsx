@@ -26,7 +26,7 @@ function ScoreBar({ label, value, negative = false }: BarProps) {
   const display = negative ? inv(value) : value;
   const p = pct(display);
   const color =
-    p >= 75 ? 'bg-[#6EA556]' : p >= 50 ? 'bg-[#FFCC18]' : 'bg-red-500';
+    p >= 75 ? 'bg-[#6EA556]' : p >= 50 ? 'bg-[#FFCC18]' : 'bg-[#ee4444]';
 
   return (
     <div className="flex items-center gap-2 text-xs">
@@ -54,7 +54,7 @@ interface CategoryProps {
 
 function Category({ title, avg, children }: CategoryProps) {
   const p = pct(avg);
-  const color = p >= 75 ? 'text-[#6EA556]' : p >= 50 ? 'text-[#FFCC18]' : 'text-red-400';
+  const color = p >= 75 ? 'text-leaf' : p >= 50 ? 'text-gold' : 'text-[#ee4444]';
   const [expanded, setExpanded] = useState(true);
   return (
     <div className="space-y-1.5">
@@ -119,7 +119,7 @@ export function MicroScorePanel({ scores, label }: MicroScorePanelProps) {
           <p className="text-xs text-[#4A3220]/60 dark:text-[#F8F0E2]/50">{label}</p>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-bold text-[#BD9A1F] dark:text-[#FFCC18]">{pct(fo.finalClipScore)}</p>
+          <p className="text-2xl font-bold text-gold dark:text-gold">{pct(fo.finalClipScore)}</p>
           <p className="text-xs text-[#4A3220]/60 dark:text-[#F8F0E2]/50">clip score</p>
         </div>
       </div>

@@ -47,7 +47,11 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const tree = (
     <Providers>
-      <div className="flex min-h-screen flex-col bg-navy-950 text-cream-50">
+      <div className="relative isolate flex min-h-screen flex-col bg-navy-950 text-cream-50">
+        {/* Global decorative banana glow — behind every page, more prominent in light mode */}
+        <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+          <div className="absolute left-1/2 top-[15%] h-[42rem] w-[42rem] -translate-x-1/2 rounded-full bg-[#ffcc18] blur-[140px] opacity-[0.18] dark:opacity-[0.11]" />
+        </div>
         <SiteHeader />
         <div className="flex-1">{children}</div>
         <SiteFooter />

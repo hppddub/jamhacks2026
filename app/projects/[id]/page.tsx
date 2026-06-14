@@ -6,8 +6,8 @@ import { buildPlayback } from '@/lib/projects/serialize';
 import { AnalysisCard } from '@/components/analysis/AnalysisCard';
 import { ScoreOutput } from '@/components/player/ScoreOutput';
 import { DownloadButton } from '@/components/player/DownloadButton';
-import { StemPlayer } from '@/components/player/StemPlayer';
 import { DeleteProjectButton } from '@/components/projects/DeleteProjectButton';
+import { ProjectStemSection } from '@/components/projects/ProjectStemSection';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,9 +59,25 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         </p>
       </div>
 
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-navy-800" />
+        <span className="text-xs font-medium uppercase tracking-widest text-gold dark:text-gold">
+          Your Analysis
+        </span>
+        <div className="h-px flex-1 bg-navy-800" />
+      </div>
+
       <AnalysisCard result={analysis} />
 
-      <div className="space-y-3 rounded-xl border border-navy-800 bg-navy-900 p-5">
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-navy-800" />
+        <span className="text-xs font-medium uppercase tracking-widest text-gold dark:text-gold">
+          Your Score
+        </span>
+        <div className="h-px flex-1 bg-navy-800" />
+      </div>
+
+      <div className="bento-card space-y-3 rounded-xl border border-navy-800 bg-navy-900 p-5">
         <div className="flex flex-wrap gap-2">
           {meta.map(({ label, value }) => (
             <div key={label} className="rounded-lg border border-navy-700 bg-navy-800 px-3 py-1.5">
@@ -89,13 +105,21 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         <a
           href={master.url}
           download="master.wav"
-          className="flex items-center justify-center gap-2 rounded-xl border border-[#ffcc18]/40 bg-[#ffcc18]/10 py-3 text-sm font-semibold text-[#ffcc18] transition-colors hover:bg-[#ffcc18]/20"
+          className="flex items-center justify-center gap-2 rounded-xl border border-[#ffcc18]/40 bg-[#ffcc18]/10 py-3 text-sm font-semibold text-gold transition-colors hover:bg-[#ffcc18]/20"
         >
           ↓ Download mastered mix (.wav)
         </a>
       )}
 
-      {playback.stems && <StemPlayer result={playback.stems} />}
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-navy-800" />
+        <span className="text-xs font-medium uppercase tracking-widest text-gold dark:text-gold">
+          Your Stems
+        </span>
+        <div className="h-px flex-1 bg-navy-800" />
+      </div>
+
+      <ProjectStemSection projectId={project.id} initialStems={playback.stems} />
     </main>
   );
 }

@@ -26,7 +26,22 @@ export async function POST(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
     }
 
-    const form = await request.formData();
+    let form: FormData;
+    try {
+      form = await request.formData();
+    } catch {
+      // A failed multipart parse here almost always means the proxy truncated an
+      // oversized request body (default 10MB cap), dropping the closing boundary.
+      // Surface that explicitly instead of a generic 500. See proxyClientMaxBodySize
+      // in next.config.ts.
+      return NextResponse.json(
+        {
+          error:
+            'The rendered master was too large to upload. Try a shorter mix, or raise proxyClientMaxBodySize in next.config.ts.',
+        },
+        { status: 413 }
+      );
+    }
     const master = form.get('master');
     const mixStateRaw = form.get('mixState');
 

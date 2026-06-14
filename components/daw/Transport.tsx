@@ -65,7 +65,7 @@ export function Transport({
       </button>
 
       {/* Time display */}
-      <div className="min-w-[80px] rounded-lg border border-navy-700 bg-navy-900 px-3 py-1 text-center font-mono text-sm tabular-nums text-[#ffcc18]">
+      <div className="min-w-[80px] rounded-lg border border-navy-700 bg-navy-900 px-3 py-1 text-center font-mono text-sm tabular-nums text-gold">
         {formatDuration(currentTime)}
         <span className="text-cream-500"> / {formatDuration(totalDuration)}</span>
       </div>
@@ -115,7 +115,7 @@ export function Transport({
         onClick={onToggleMixer}
         className={`ml-auto flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors ${
           mixerOpen
-            ? 'border-[#ffcc18] bg-[#ffcc18]/15 text-[#ffcc18]'
+            ? 'border-[#ffcc18] bg-[#ffcc18]/15 text-gold'
             : 'border-navy-700 bg-navy-900 text-cream-300 hover:bg-navy-800'
         }`}
         title="Toggle mixer"

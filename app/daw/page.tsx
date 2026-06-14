@@ -14,12 +14,12 @@ import { ExportPanel } from '@/components/daw/ExportPanel';
 import { Mixer } from '@/components/daw/Mixer';
 import type { DAWLibraryItem } from '@/types/daw';
 
-// Stem colors mirrored from StemPlayer
+// Stem colors mirrored from StemPlayer's STEM_STYLE
 const STEM_COLORS: Record<string, string> = {
-  drums: '#f97316',
-  bass: '#a855f7',
-  melody: '#ffcc18',
-  vocals: '#2dd4bf',
+  drums: '#ee4444',
+  bass: '#6EA556',
+  melody: '#FFCC18',
+  vocals: '#7CA0CB',
 };
 
 const STEM_LABELS: Record<string, string> = {
@@ -55,7 +55,7 @@ function DAWContent() {
     }
     const originalUrl = params.get('original');
     if (originalUrl) {
-      items.push({ id: 'original', label: 'Original Audio', group: 'original', audioUrl: originalUrl, color: '#7CA0CB' });
+      items.push({ id: 'original', label: 'Original Audio', group: 'original', audioUrl: originalUrl, color: '#7ca0cb' });
     }
     const stemsParam = params.get('stems');
     if (stemsParam) {
@@ -69,7 +69,7 @@ function DAWContent() {
           label: STEM_LABELS[stemId] ?? `${stemId} Stem`,
           group: 'stems',
           audioUrl: url,
-          color: STEM_COLORS[stemId] ?? '#6b7280',
+          color: STEM_COLORS[stemId] ?? '#7ca0cb',
         });
       }
     }

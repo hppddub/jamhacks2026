@@ -184,7 +184,10 @@ export function AudioPlayer({ src, label = 'Generated Score', videoRef, bpm }: A
               className={`min-w-[2px] flex-1 rounded-full transition-colors duration-150 ${
                 filled ? 'bg-[#ffcc18]' : 'bg-navy-700'
               }`}
-              style={{ height: `${h}px` }}
+              // Fixed precision so the SSR and client strings match exactly —
+              // Math.sin's trailing digits can differ across JS engines and
+              // would otherwise trigger a hydration mismatch on these heights.
+              style={{ height: `${h.toFixed(2)}px` }}
             />
           );
         })}

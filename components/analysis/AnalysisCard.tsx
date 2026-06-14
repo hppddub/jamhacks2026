@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { TimelineBar } from './TimelineBar';
 import { MicroScorePanel } from './MicroScorePanel';
+import { SegmentDetailPanel } from './SegmentDetailPanel';
 import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import type { AnalysisResult } from '@/types';
 
@@ -34,27 +35,27 @@ function useCountUp(target: number, duration = 900) {
 }
 
 const MOOD_BADGE: Record<string, string> = {
-  inspirational: 'bg-[#7CA0CB]/10 text-[#7CA0CB] border-[#7CA0CB]/20',
-  emotional:     'bg-[#6EA556]/10 text-[#6EA556] border-[#6EA556]/20',
-  dramatic:      'bg-[#B28B52]/10 text-[#B28B52] border-[#B28B52]/20 dark:bg-[#fdf3ab]/10 dark:text-[#fdf3ab] dark:border-[#fdf3ab]/20',
-  energetic:     'bg-[#ffcc18]/10 text-[#ffcc18] border-[#ffcc18]/20',
-  suspenseful:   'bg-[#6EA556]/10 text-[#6EA556] border-[#6EA556]/20',
-  corporate:     'bg-[#7CA0CB]/10 text-[#7CA0CB] border-[#7CA0CB]/20',
-  happy:         'bg-[#B28B52]/10 text-[#B28B52] border-[#B28B52]/20 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/20',
-  calm:          'bg-green-500/10 text-green-400 border-green-500/20',
+  inspirational: 'bg-[#7CA0CB]/10 text-slate border-[#7CA0CB]/20',
+  emotional:     'bg-[#6EA556]/10 text-leaf border-[#6EA556]/20',
+  dramatic:      'bg-[#B28B52]/10 text-bronze border-[#B28B52]/20 dark:bg-[#fdf3ab]/10 dark:text-[#fdf3ab] dark:border-[#fdf3ab]/20',
+  energetic:     'bg-[#ffcc18]/10 text-gold border-[#ffcc18]/20',
+  suspenseful:   'bg-[#6EA556]/10 text-leaf border-[#6EA556]/20',
+  corporate:     'bg-[#7CA0CB]/10 text-slate border-[#7CA0CB]/20',
+  happy:         'bg-[#B28B52]/10 text-bronze border-[#B28B52]/20 dark:bg-[#ffcc18]/10 dark:text-gold dark:border-[#ffcc18]/20',
+  calm:          'bg-[#6EA556]/10 text-leaf border-[#6EA556]/20',
 };
 
 const ENERGY_BADGE: Record<string, string> = {
-  low:    'bg-green-500/10 text-green-400 border-green-500/20',
-  medium: 'bg-[#B28B52]/10 text-[#B28B52] border-[#B28B52]/20 dark:bg-yellow-500/10 dark:text-yellow-400 dark:border-yellow-500/20',
-  high:   'bg-[#B28B52]/10 text-[#B28B52] border-[#B28B52]/20 dark:bg-[#fdf3ab]/10 dark:text-[#fdf3ab] dark:border-[#fdf3ab]/20',
+  low:    'bg-[#6EA556]/10 text-leaf border-[#6EA556]/20',
+  medium: 'bg-[#B28B52]/10 text-bronze border-[#B28B52]/20 dark:bg-[#ffcc18]/10 dark:text-gold dark:border-[#ffcc18]/20',
+  high:   'bg-[#B28B52]/10 text-bronze border-[#B28B52]/20 dark:bg-[#fdf3ab]/10 dark:text-[#fdf3ab] dark:border-[#fdf3ab]/20',
 };
 
 const AUDIO_TYPE_BADGE: Record<string, string> = {
   dialogue:         'bg-[#4A3220]/10 text-[#4A3220] border-[#4A3220]/20',
   sound_effects:    'bg-[#C39C0F]/10 text-[#C39C0F] border-[#C39C0F]/20',
-  background_music: 'bg-[#7CA0CB]/10 text-[#7CA0CB] border-[#7CA0CB]/20',
-  ambient:          'bg-[#6EA556]/10 text-[#6EA556] border-[#6EA556]/20',
+  background_music: 'bg-[#7CA0CB]/10 text-slate border-[#7CA0CB]/20',
+  ambient:          'bg-[#6EA556]/10 text-leaf border-[#6EA556]/20',
   silence:          'bg-[#1D2F45]/50 text-cream-300 border-[#1D2F45]',
 };
 
@@ -92,7 +93,7 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
           <h3 className="text-lg font-semibold text-cream-50">Video Profile</h3>
         </div>
         <div className="text-right">
-          <p className="text-4xl font-bold tabular-nums text-[#ffcc18]">{bpmDisplay}</p>
+          <p className="text-4xl font-bold tabular-nums text-gold">{bpmDisplay}</p>
           <p className="mt-0.5 text-xs text-cream-300">
             BPM
             <InfoTooltip label="Beats per minute — the suggested tempo of the score, derived from the video's energy and pacing." />
@@ -112,7 +113,7 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
         />
         <Badge
           label={`${analysis.pace} pace`}
-          className="border-[#7CA0CB]/20 bg-[#7CA0CB]/10 text-[#7CA0CB]"
+          className="border-[#7CA0CB]/20 bg-[#7CA0CB]/10 text-slate"
         />
         <Badge
           label={analysis.genre}
@@ -193,7 +194,7 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
             {analysis.volumeDynamics && (
               <Badge
                 label={`${analysis.volumeDynamics} volume`}
-                className="border-[#7CA0CB]/20 bg-[#7CA0CB]/10 text-[#7CA0CB]"
+                className="border-[#7CA0CB]/20 bg-[#7CA0CB]/10 text-slate"
               />
             )}
             {analysis.dialogueTone && (
@@ -205,7 +206,7 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
             {analysis.dialogueSentiment && (
               <Badge
                 label={`${analysis.dialogueSentiment} sentiment`}
-                className="border-[#6EA556]/20 bg-[#6EA556]/10 text-[#6EA556]"
+                className="border-[#6EA556]/20 bg-[#6EA556]/10 text-leaf"
               />
             )}
           </div>
@@ -224,12 +225,20 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
         />
       </div>
 
-      {/* Micro-score panel for selected segment */}
-      {selectedSegment !== null && analysis.timeline[selectedSegment]?.microScores && (
-        <MicroScorePanel
-          scores={analysis.timeline[selectedSegment].microScores!}
-          label={analysis.timeline[selectedSegment].label}
-        />
+      {/* Detailed analysis panel for the selected segment — the rich micro-score
+          breakdown when available, otherwise the per-segment musical/audio detail. */}
+      {selectedSegment !== null && analysis.timeline[selectedSegment] && (
+        analysis.timeline[selectedSegment].microScores ? (
+          <MicroScorePanel
+            scores={analysis.timeline[selectedSegment].microScores!}
+            label={analysis.timeline[selectedSegment].label}
+          />
+        ) : (
+          <SegmentDetailPanel
+            segment={analysis.timeline[selectedSegment]}
+            index={selectedSegment}
+          />
+        )
       )}
     </div>
   );

@@ -9,7 +9,7 @@ interface StemPlayerProps {
 }
 
 const STEM_STYLE: Record<StemId, { color: string; label: string; waveParams: [number, number, number] }> = {
-  drums:  { color: '#ef4444', label: 'Drums & Percussion', waveParams: [0.7, 1.9, 2.1] },
+  drums:  { color: '#ee4444', label: 'Drums & Percussion', waveParams: [0.7, 1.9, 2.1] },
   bass:   { color: '#6EA556', label: 'Bass',               waveParams: [0.3, 0.6, 0.5] },
   melody: { color: '#FFCC18', label: 'Melody & Harmony',   waveParams: [0.9, 0.4, 1.4] },
   vocals: { color: '#7CA0CB', label: 'Vocals',             waveParams: [0.5, 1.1, 0.8] },
@@ -87,7 +87,9 @@ function StemRow({ stem }: { stem: Stem }) {
             <div
               key={i}
               className="flex-1 rounded-full transition-colors duration-100"
-              style={{ height: `${h}px`, backgroundColor: filled ? style.color : '#2D4B6E' }}
+              // Fixed precision so SSR/client strings match (avoids a hydration
+              // mismatch from Math.sin's engine-dependent trailing digits).
+              style={{ height: `${h.toFixed(2)}px`, backgroundColor: filled ? style.color : '#2D4B6E' }}
             />
           );
         })}

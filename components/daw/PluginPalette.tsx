@@ -25,7 +25,7 @@ export function PluginPalette({ selectedInsert, onAddEffect, onOpenMixer }: Plug
     <div className="border-b border-navy-800/60">
       <div className="flex items-center justify-between px-4 pt-3 pb-1">
         <p className="text-[10px] font-semibold uppercase tracking-widest text-cream-500">Plugins</p>
-        <button onClick={onOpenMixer} className="text-[9px] text-cream-500 hover:text-[#ffcc18]" title="Open mixer">
+        <button onClick={onOpenMixer} className="text-[9px] text-cream-500 hover:text-gold" title="Open mixer">
           Mixer ↕
         </button>
       </div>
@@ -44,7 +44,7 @@ export function PluginPalette({ selectedInsert, onAddEffect, onOpenMixer }: Plug
           className="group flex w-full items-center gap-2 px-3 py-1.5 text-left transition-colors hover:bg-navy-900 disabled:opacity-40"
           title={`Add ${EFFECT_LABELS[type]} to ${selectedInsert?.name ?? 'insert'}`}
         >
-          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-navy-800 text-[9px] font-bold text-[#ffcc18]">
+          <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded bg-navy-800 text-[9px] font-bold text-gold">
             fx
           </span>
           <span className="min-w-0 flex-1">
