@@ -77,7 +77,7 @@ export function ScoreOutput({ score, videoSrc, originalAudioUrl }: ScoreOutputPr
 
       {/* Bottom-right toggle — only meaningful for the combined view */}
       {tab === 'combined' && (
-        <div className="flex items-center justify-end gap-3 border-t border-navy-800 pt-3">
+        <div className="flex items-center justify-start gap-3 border-t border-navy-800 pt-3">
           <span className={`text-xs ${hasOriginalAudio ? 'text-cream-300' : 'text-cream-500'}`}>
             {hasOriginalAudio ? 'Include original audio' : 'Original video has no usable audio track'}
           </span>
@@ -87,13 +87,13 @@ export function ScoreOutput({ score, videoSrc, originalAudioUrl }: ScoreOutputPr
             aria-label="Include original video audio"
             disabled={!hasOriginalAudio}
             onClick={() => setIncludeOriginalAudio((v) => !v)}
-            className={`inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full px-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+            className={`relative h-6 w-11 flex-shrink-0 overflow-hidden rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
               hasOriginalAudio && includeOriginalAudio ? 'bg-[#ffcc18]' : 'bg-navy-700'
             }`}
           >
             <span
-              className={`inline-block h-5 w-5 rounded-full bg-navy-950 transition-transform ${
-                hasOriginalAudio && includeOriginalAudio ? 'translate-x-5' : 'translate-x-0'
+              className={`absolute top-[2px] left-0 h-5 w-5 rounded-full bg-navy-950 transition-transform ${
+                hasOriginalAudio && includeOriginalAudio ? 'translate-x-[22px]' : 'translate-x-[2px]'
               }`}
             />
           </button>

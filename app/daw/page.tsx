@@ -2,7 +2,7 @@
 
 import { Suspense, useMemo } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { DAWWorkspace } from '@/components/daw/DAWWorkspace';
+import { DAW } from '@/components/daw/DAW';
 import type { DAWLibraryItem } from '@/types/daw';
 
 // Stem colors mirrored from StemPlayer's STEM_STYLE
@@ -22,26 +22,21 @@ const STEM_LABELS: Record<string, string> = {
 
 export default function DAWPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex h-[calc(100vh-65px)] items-center justify-center bg-navy-950 text-sm text-cream-400">
-          Loading Studio…
-        </div>
-      }
-    >
-      <DAWUrlContent />
+    <Suspense fallback={
+      <div className="flex h-screen items-center justify-center bg-navy-950 text-sm text-cream-400">
+        Loading Studio…
+      </div>
+    }>
+      <DAWContent />
     </Suspense>
   );
 }
 
-/**
- * Standalone DAW entry seeded from URL query params, e.g.
- * `?score=/generated/x.mp3&original=/uploads/x.mp3&stems=drums:/stems/id/drums.mp3,...`.
- * The project-bound entry is `/mix/[projectId]`, which seeds from a saved MixSession.
- */
-function DAWUrlContent() {
+function DAWContent() {
   const params = useSearchParams();
 
+  // Parse seed library items from URL query params:
+  // ?score=/generated/x.mp3&original=/uploads/x.mp3&stems=drums:/stems/id/drums.mp3,...
   const seedItems = useMemo<DAWLibraryItem[]>(() => {
     const items: DAWLibraryItem[] = [];
 
@@ -72,5 +67,5 @@ function DAWUrlContent() {
     return items;
   }, [params]);
 
-  return <DAWWorkspace seedItems={seedItems} />;
+  return <DAW seedItems={seedItems} />;
 }

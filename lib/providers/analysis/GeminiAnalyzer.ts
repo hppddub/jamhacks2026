@@ -268,7 +268,8 @@ Rules:
 - segmentation fields: shotChanges and sceneChanges are density scores 0-1 (0=none, 1=high density); actionStartTime/actionPeakTime/actionEndTime are relative timestamps within the segment 0-1; segmentOverlap is continuity quality 0-1
 - sceneUnderstanding strings: sceneCategory (e.g. "action", "dialogue", "landscape"), environmentType (e.g. "stadium", "office", "street"), indoorOutdoor ("indoor" | "outdoor" | "mixed"), activityType (primary observed activity)
 - finalOutputs: compute segmentScore from segmentation quality; eventScore from scene salience and event density; technicalScore from visualQuality and confidence; aestheticScore from subjectAnalysis and visual quality; engagementScore from attentionEngagement; taskScore from taskSpecific; penaltyScore from safety.moderationPenalty; confidenceAdjustedScore = weighted composite × confidence.modelConfidence; finalClipScore = confidenceAdjustedScore × (1 − penaltyScore)
-- genre: choose the single best-fit genre from the full list — lo-fi-hip-hop for mellow study/chill content; hip-hop for rap/urban; pop for mainstream catchy content; rock/indie/punk for guitar-driven energy; folk/acoustic for unplugged intimate content; blues for soulful slow content; r-and-b for smooth groove; jazz for swing/bebop; electronic/dance for synth-driven beats; classical for formal concert-hall; orchestral for large ensemble film style; cinematic for dramatic film-score feel; ambient for slow atmospheric; world for non-Western cultural music; default to cinematic only for genuinely dramatic filmic content
+- genre: choose the single best-fit genre from the full list — lo-fi-hip-hop for mellow study/chill content; hip-hop for rap/urban; pop for mainstream catchy content; rock/indie/punk for guitar-driven energy; folk/acoustic for unplugged intimate content; blues for soulful slow content; r-and-b for smooth groove; jazz for swing/bebop; electronic/dance for synth-driven beats; classical for formal concert-hall; orchestral for large ensemble film style; cinematic for dramatic film-score feel; ambient for slow atmospheric; world for non-Western cultural music
+- GENRE DIVERSITY (important): do NOT default to hip-hop, orchestral, or cinematic. These are over-used — only pick them when the content genuinely demands them (hip-hop only for explicitly urban/rap content; orchestral/cinematic only for grand, dramatic, film-trailer-scale material). For the vast majority of everyday videos, prefer a more specific, down-to-earth genre that matches the actual vibe: pop, indie, rock, folk, acoustic, electronic, lo-fi-hip-hop, r-and-b, blues, jazz, ambient, or world. A casual vlog is pop or indie, not cinematic; a calm nature clip is folk/acoustic/ambient, not orchestral; an upbeat lifestyle reel is pop/electronic/dance; a cozy moment is lo-fi-hip-hop or acoustic. Match the everyday genre a real creator would actually choose
 - drumsAppropriate: true for hip-hop, pop, rock, indie, blues, r-and-b, jazz, electronic, dance, world, punk, cinematic with accents, orchestral with accents; false for classical solo, pure ambient, intimate acoustic-only, and soundscapes without any rhythm section
 - drumStyle: must match the genre — lo-fi-compressed for lo-fi-hip-hop; electronic-808 for hip-hop/electronic/dance; acoustic-kit for pop/rock/indie/blues/r-and-b; brushed-jazz for jazz; orchestral-bass-drum for orchestral/cinematic only on structural accents; none when drumsAppropriate is false
 - vocalPresence: default to none for all genres except when the content specifically warrants human vocal elements; choir-pads reserved for genuinely triumphant/transcendent orchestral climaxes; backing-harmonies for pop/folk/indie with clear emotional warmth; vocal-chops for electronic/hip-hop only; humming for quiet intimate introspection; scat for jazz; when uncertain choose none`;
@@ -443,11 +444,12 @@ export class GeminiAnalyzer implements VideoAnalysisProvider {
       config: { mimeType, displayName: metadata.filename },
     });
 
-    // Poll until Gemini has finished processing the video
+    // Poll until Gemini has finished processing the video.
+    // Fast 1.2s interval (up to ~48s) so short clips clear quickly.
     let file = uploadedFile;
     let attempts = 0;
-    while (file.state === FileState.PROCESSING && attempts < 30) {
-      await delay(3000);
+    while (file.state === FileState.PROCESSING && attempts < 40) {
+      await delay(1200);
       file = await this.ai.files.get({ name: file.name! });
       attempts++;
     }
