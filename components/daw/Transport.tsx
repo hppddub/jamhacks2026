@@ -1,7 +1,7 @@
 'use client';
 
 import { formatDuration } from '@/lib/utils';
-import type { DAWTransportState } from '@/types/daw';
+import type { DAWTransportState, DAWToolMode } from '@/types/daw';
 
 interface TransportProps {
   transport: DAWTransportState;
@@ -10,6 +10,7 @@ interface TransportProps {
   bpm: number;
   loadingAudio: boolean;
   mixerOpen: boolean;
+  toolMode: DAWToolMode;
   onPlay: () => void;
   onPause: () => void;
   onStop: () => void;
@@ -17,11 +18,12 @@ interface TransportProps {
   onZoomIn: () => void;
   onZoomOut: () => void;
   onToggleMixer: () => void;
+  onSetToolMode: (mode: DAWToolMode) => void;
 }
 
 export function Transport({
-  transport, currentTime, totalDuration, bpm, loadingAudio, mixerOpen,
-  onPlay, onPause, onStop, onBpmChange, onZoomIn, onZoomOut, onToggleMixer,
+  transport, currentTime, totalDuration, bpm, loadingAudio, mixerOpen, toolMode,
+  onPlay, onPause, onStop, onBpmChange, onZoomIn, onZoomOut, onToggleMixer, onSetToolMode,
 }: TransportProps) {
   const isPlaying = transport === 'playing';
 
@@ -79,6 +81,33 @@ export function Transport({
           onChange={e => onBpmChange(parseInt(e.target.value) || DEFAULT_BPM)}
           className="w-16 rounded-lg border border-navy-700 bg-navy-900 px-2 py-1 text-center text-sm text-cream-100 focus:border-[#ffcc18] focus:outline-none"
         />
+      </div>
+
+      {/* Move / Slice tool toggle */}
+      <div className="flex items-center gap-0.5 rounded-lg border border-navy-700 bg-navy-900 p-0.5" title="Clip tool — Move or Slice">
+        <button
+          onClick={() => onSetToolMode('move')}
+          className={`flex h-6 w-7 items-center justify-center rounded transition-colors ${
+            toolMode === 'move' ? 'bg-[#ffcc18] text-navy-950' : 'text-cream-300 hover:bg-navy-800'
+          }`}
+          title="Move tool (drag clips, trim edges)"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 9l-3 3 3 3M9 5l3-3 3 3M15 19l-3 3-3-3M19 9l3 3-3 3M2 12h20M12 2v20" />
+          </svg>
+        </button>
+        <button
+          onClick={() => onSetToolMode('slice')}
+          className={`flex h-6 w-7 items-center justify-center rounded transition-colors ${
+            toolMode === 'slice' ? 'bg-[#ffcc18] text-navy-950' : 'text-cream-300 hover:bg-navy-800'
+          }`}
+          title="Slice tool (click a clip to split it)"
+        >
+          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <circle cx="6" cy="6" r="3" /><circle cx="6" cy="18" r="3" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20 4L8.5 15.5M20 20L8.5 8.5" />
+          </svg>
+        </button>
       </div>
 
       {/* Mixer toggle */}

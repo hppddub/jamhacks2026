@@ -1,20 +1,27 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
-import type { DAWClip, DAWLibraryItem, DAWProject, DAWTrack, MixerInsert } from '@/types/daw';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { DAWClip, DAWLibraryItem, DAWProject, DAWTrack, DAWToolMode, MixerInsert } from '@/types/daw';
+import { getPeaks } from '@/lib/audio/waveform';
 
 const TRACK_HEIGHT = 60;
 const COLLAPSED_HEIGHT = 28;
 const RULER_HEIGHT = 30;
 const HEADER_WIDTH = 200;
+const MIN_CLIP = 0.1;       // smallest trim/split length (s)
+const TRIM_HANDLE_PX = 6;   // edge hit-zone width
 
 interface ArrangementProps {
   project: DAWProject;
   currentTime: number;
   pxPerSecond: number;
+  toolMode: DAWToolMode;
   onSeek: (t: number) => void;
   onMoveClip: (clipId: string, newStart: number) => void;
   onDeleteClip: (clipId: string) => void;
+  onTrimClipStart: (clipId: string, newStart: number) => void;
+  onTrimClipEnd: (clipId: string, newDuration: number) => void;
+  onSplitClip: (clipId: string, atSeconds: number) => void;
   onToggleMute: (trackId: string) => void;
   onToggleSolo: (trackId: string) => void;
   onToggleCollapse: (trackId: string) => void;
@@ -68,36 +75,97 @@ function Ruler({ totalDuration, pxPerSecond, secondsPerBar, pxPerBeat, onSeek }:
   );
 }
 
+/** Monochrome peak waveform drawn inside the clip's trimmed window. */
+function ClipWaveform({ audioUrl, offsetSeconds, durationSeconds, sourceDurationSeconds, width, height }: {
+  audioUrl: string;
+  offsetSeconds: number;
+  durationSeconds: number;
+  sourceDurationSeconds: number;
+  width: number;
+  height: number;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [peaks, setPeaks] = useState<Float32Array | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getPeaks(audioUrl).then(p => { if (alive) setPeaks(p); }).catch(() => {});
+    return () => { alive = false; };
+  }, [audioUrl]);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const w = Math.max(1, Math.round(width));
+    const h = Math.max(1, Math.round(height));
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, w, h);
+    if (!peaks || peaks.length === 0) return;
+
+    const srcDur = sourceDurationSeconds > 0 ? sourceDurationSeconds : durationSeconds;
+    const total = peaks.length;
+    const i0 = Math.max(0, Math.floor((offsetSeconds / srcDur) * total));
+    const i1 = Math.min(total, Math.max(i0 + 1, Math.ceil(((offsetSeconds + durationSeconds) / srcDur) * total)));
+    const span = i1 - i0;
+    const mid = h / 2;
+    ctx.fillStyle = 'rgba(15, 30, 53, 0.55)'; // dark navy, reads on any clip color
+    for (let x = 0; x < w; x++) {
+      const bi = i0 + Math.floor((x / w) * span);
+      const p = peaks[Math.min(total - 1, Math.max(0, bi))] || 0;
+      const bh = Math.max(1, p * (h - 2));
+      ctx.fillRect(x, mid - bh / 2, 1, bh);
+    }
+  }, [peaks, offsetSeconds, durationSeconds, sourceDurationSeconds, width, height]);
+
+  return <canvas ref={canvasRef} className="pointer-events-none absolute inset-0 h-full w-full" />;
+}
+
 interface ClipProps {
   clip: DAWClip;
   pxPerSecond: number;
   secondsPerBeat: number;
+  toolMode: DAWToolMode;
   onMoveClip: (clipId: string, newStart: number) => void;
   onDeleteClip: (clipId: string) => void;
+  onTrimStart: (clipId: string, newStart: number) => void;
+  onTrimEnd: (clipId: string, newDuration: number) => void;
+  onSplit: (clipId: string, atSeconds: number) => void;
 }
 
-function Clip({ clip, pxPerSecond, secondsPerBeat, onMoveClip, onDeleteClip }: ClipProps) {
-  const dragRef = useRef<{ startX: number; startSeconds: number } | null>(null);
+function Clip({ clip, pxPerSecond, secondsPerBeat, toolMode, onMoveClip, onDeleteClip, onTrimStart, onTrimEnd, onSplit }: ClipProps) {
+  const dragRef = useRef<{ startX: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
+  const [trim, setTrim] = useState<{ edge: 'start' | 'end'; dx: number } | null>(null);
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const snap = (t: number) => Math.round(t / secondsPerBeat) * secondsPerBeat;
+
+  // ── Body: move (move tool) or split (slice tool) ───────────────────────────
+  const handleBodyDown = (e: React.MouseEvent) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    dragRef.current = { startX: e.clientX, startSeconds: clip.startSeconds };
-    setDragging(true);
 
+    if (toolMode === 'slice') {
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const at = snap(clip.startSeconds + (e.clientX - rect.left) / pxPerSecond);
+      onSplit(clip.id, at);
+      return;
+    }
+
+    dragRef.current = { startX: e.clientX };
+    setDragging(true);
     const onMove = (ev: MouseEvent) => {
       if (!dragRef.current) return;
       setDragOffset((ev.clientX - dragRef.current.startX) / pxPerSecond);
     };
     const onUp = (ev: MouseEvent) => {
       if (!dragRef.current) return;
-      const raw = dragRef.current.startSeconds + (ev.clientX - dragRef.current.startX) / pxPerSecond;
-      // Snap to nearest beat
-      const snapped = Math.max(0, Math.round(raw / secondsPerBeat) * secondsPerBeat);
-      onMoveClip(clip.id, snapped);
+      const raw = clip.startSeconds + (ev.clientX - dragRef.current.startX) / pxPerSecond;
+      onMoveClip(clip.id, Math.max(0, snap(raw)));
       dragRef.current = null;
       setDragging(false);
       setDragOffset(0);
@@ -108,24 +176,88 @@ function Clip({ clip, pxPerSecond, secondsPerBeat, onMoveClip, onDeleteClip }: C
     window.addEventListener('mouseup', onUp);
   };
 
-  const displayStart = clip.startSeconds + (dragging ? dragOffset : 0);
+  // ── Edge handles: trim (inward, restore out to source bounds) ───────────────
+  const handleTrimDown = (edge: 'start' | 'end') => (e: React.MouseEvent) => {
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const startX = e.clientX;
+    setTrim({ edge, dx: 0 });
+    const onMove = (ev: MouseEvent) => setTrim({ edge, dx: ev.clientX - startX });
+    const onUp = (ev: MouseEvent) => {
+      const dxSec = (ev.clientX - startX) / pxPerSecond;
+      if (edge === 'start') {
+        onTrimStart(clip.id, snap(clip.startSeconds + dxSec));
+      } else {
+        onTrimEnd(clip.id, snap(clip.startSeconds + clip.durationSeconds + dxSec) - clip.startSeconds);
+      }
+      setTrim(null);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  // ── Preview geometry (move + trim) ─────────────────────────────────────────
+  let dispStart = clip.startSeconds;
+  let dispDur = clip.durationSeconds;
+  let dispOffset = clip.offsetSeconds;
+  if (dragging) {
+    dispStart = clip.startSeconds + dragOffset;
+  } else if (trim) {
+    const dxSec = trim.dx / pxPerSecond;
+    if (trim.edge === 'start') {
+      const d = Math.max(-clip.offsetSeconds, Math.min(clip.durationSeconds - MIN_CLIP, dxSec));
+      dispStart = clip.startSeconds + d;
+      dispDur = clip.durationSeconds - d;
+      dispOffset = clip.offsetSeconds + d;
+    } else {
+      dispDur = Math.max(MIN_CLIP, Math.min(clip.sourceDurationSeconds - clip.offsetSeconds, clip.durationSeconds + dxSec));
+    }
+  }
+
+  const widthPx = Math.max(dispDur * pxPerSecond - 2, 8);
+  const heightPx = TRACK_HEIGHT - 10;
+  const active = dragging || trim !== null;
 
   return (
     <div
-      onMouseDown={handleMouseDown}
+      onMouseDown={handleBodyDown}
       onContextMenu={e => { e.preventDefault(); onDeleteClip(clip.id); }}
-      className={`absolute top-1 flex select-none items-center overflow-hidden rounded px-2 ${
-        dragging ? 'z-10 cursor-grabbing opacity-90 shadow-lg' : 'cursor-grab hover:brightness-110'
-      }`}
-      style={{
-        left: Math.max(0, displayStart) * pxPerSecond,
-        width: Math.max(clip.durationSeconds * pxPerSecond - 2, 20),
-        height: TRACK_HEIGHT - 10,
-        backgroundColor: clip.color,
-      }}
-      title={`${clip.label} — drag to move, right-click to delete`}
+      className={`absolute top-1 select-none overflow-hidden rounded ${
+        active ? 'z-10 opacity-90 shadow-lg' : 'hover:brightness-110'
+      } ${toolMode === 'slice' ? 'cursor-crosshair' : dragging ? 'cursor-grabbing' : 'cursor-grab'}`}
+      style={{ left: Math.max(0, dispStart) * pxPerSecond, width: widthPx, height: heightPx, backgroundColor: clip.color }}
+      title={toolMode === 'slice'
+        ? `${clip.label} — click to split`
+        : `${clip.label} — drag to move, edges to trim, right-click to delete`}
     >
-      <span className="truncate text-[10px] font-medium text-navy-950">{clip.label}</span>
+      <ClipWaveform
+        audioUrl={clip.audioUrl}
+        offsetSeconds={dispOffset}
+        durationSeconds={dispDur}
+        sourceDurationSeconds={clip.sourceDurationSeconds}
+        width={widthPx}
+        height={heightPx}
+      />
+      <span className="pointer-events-none relative z-10 block truncate px-2 pt-0.5 text-[10px] font-medium text-navy-950">
+        {clip.label}
+      </span>
+
+      {/* Trim handles */}
+      <div
+        onMouseDown={handleTrimDown('start')}
+        className="absolute inset-y-0 left-0 z-20 cursor-ew-resize bg-navy-950/30 opacity-0 hover:opacity-100"
+        style={{ width: TRIM_HANDLE_PX }}
+        title="Trim start"
+      />
+      <div
+        onMouseDown={handleTrimDown('end')}
+        className="absolute inset-y-0 right-0 z-20 cursor-ew-resize bg-navy-950/30 opacity-0 hover:opacity-100"
+        style={{ width: TRIM_HANDLE_PX }}
+        title="Trim end"
+      />
     </div>
   );
 }
@@ -137,6 +269,7 @@ interface TrackRowProps {
   secondsPerBeat: number;
   totalWidth: number;
   pxPerBeat: number;
+  toolMode: DAWToolMode;
   onToggleMute: (id: string) => void;
   onToggleSolo: (id: string) => void;
   onToggleCollapse: (id: string) => void;
@@ -144,14 +277,17 @@ interface TrackRowProps {
   onRemoveTrack: (id: string) => void;
   onMoveClip: (clipId: string, newStart: number) => void;
   onDeleteClip: (clipId: string) => void;
+  onTrimStart: (clipId: string, newStart: number) => void;
+  onTrimEnd: (clipId: string, newDuration: number) => void;
+  onSplit: (clipId: string, atSeconds: number) => void;
   onDragOverLane: (e: React.DragEvent) => void;
   onDropOnLane: (e: React.DragEvent, trackId: string) => void;
 }
 
 function TrackRow({
-  track, inserts, pxPerSecond, secondsPerBeat, totalWidth, pxPerBeat,
+  track, inserts, pxPerSecond, secondsPerBeat, totalWidth, pxPerBeat, toolMode,
   onToggleMute, onToggleSolo, onToggleCollapse, onSetTrackInsert, onRemoveTrack,
-  onMoveClip, onDeleteClip, onDragOverLane, onDropOnLane,
+  onMoveClip, onDeleteClip, onTrimStart, onTrimEnd, onSplit, onDragOverLane, onDropOnLane,
 }: TrackRowProps) {
   const rowHeight = track.collapsed ? COLLAPSED_HEIGHT : TRACK_HEIGHT;
 
@@ -231,8 +367,12 @@ function TrackRow({
               clip={clip}
               pxPerSecond={pxPerSecond}
               secondsPerBeat={secondsPerBeat}
+              toolMode={toolMode}
               onMoveClip={onMoveClip}
               onDeleteClip={onDeleteClip}
+              onTrimStart={onTrimStart}
+              onTrimEnd={onTrimEnd}
+              onSplit={onSplit}
             />
           ))}
         </div>
@@ -242,8 +382,8 @@ function TrackRow({
 }
 
 export function Arrangement({
-  project, currentTime, pxPerSecond,
-  onSeek, onMoveClip, onDeleteClip,
+  project, currentTime, pxPerSecond, toolMode,
+  onSeek, onMoveClip, onDeleteClip, onTrimClipStart, onTrimClipEnd, onSplitClip,
   onToggleMute, onToggleSolo, onToggleCollapse, onSetVolume, onSetTrackInsert,
   onRemoveTrack, onDropItem,
 }: ArrangementProps) {
@@ -311,6 +451,7 @@ export function Arrangement({
             secondsPerBeat={secondsPerBeat}
             totalWidth={totalWidth}
             pxPerBeat={pxPerBeat}
+            toolMode={toolMode}
             onToggleMute={onToggleMute}
             onToggleSolo={onToggleSolo}
             onToggleCollapse={onToggleCollapse}
@@ -318,6 +459,9 @@ export function Arrangement({
             onRemoveTrack={onRemoveTrack}
             onMoveClip={onMoveClip}
             onDeleteClip={onDeleteClip}
+            onTrimStart={onTrimClipStart}
+            onTrimEnd={onTrimClipEnd}
+            onSplit={onSplitClip}
             onDragOverLane={handleDragOver}
             onDropOnLane={handleDropOnTrack}
           />

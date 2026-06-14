@@ -38,8 +38,10 @@ export function extractOriginalAudio(videoPath: string, id: string): string | un
         '-i', videoPath,
         '-vn',                // drop video
         '-map', '0:a:0?',     // first audio stream, optional (no error if absent)
+        '-ac', '1',           // mono — half the data, faster encode (preview track only)
         '-c:a', 'libmp3lame',
-        '-b:a', '192k',
+        '-b:a', '96k',        // lower bitrate — this is a reference/preview track
+        '-threads', '0',      // use all cores
         outPath,
       ],
       { timeout: EXTRACT_TIMEOUT_MS, env: { ...process.env, PATH: resolvedPath() } }

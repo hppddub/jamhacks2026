@@ -185,8 +185,65 @@ export function buildCompositionPlan(result: AnalysisResult): CompositionPlan {
   };
 }
 
-/** Track-wide musical direction derived from the overall analysis. */
+// Genres that have no rhythm section.
+const NO_DRUM_GENRES = new Set(['folk', 'acoustic', 'classical', 'ambient']);
+
+/** A genre-appropriate BASS layer descriptor (always present — never cello as bass). */
+function bassLayer(genre: string): string {
+  if (genre === 'electronic' || genre === 'dance') return 'deep synth sub-bass';
+  if (genre === 'jazz' || genre === 'blues' || genre === 'world') return 'upright acoustic bass';
+  if (genre === 'classical' || genre === 'orchestral' || genre === 'cinematic' || genre === 'ambient')
+    return 'low cello and contrabass foundation';
+  if (genre === 'folk' || genre === 'acoustic') return 'warm acoustic bass';
+  return 'electric bass guitar groove';
+}
+
+/** A genre-appropriate DRUMS layer descriptor, or null when no rhythm section fits. */
+function drumLayer(a: VideoAnalysis): string | null {
+  if (a.drumsAppropriate === false) return null;
+  if (a.drumStyle === 'none') return null;
+  if (a.drumsAppropriate === undefined && NO_DRUM_GENRES.has(a.genre)) return null;
+  const g = a.genre;
+  if (g === 'electronic' || g === 'dance' || g === 'hip-hop') return 'punchy electronic drum beat';
+  if (g === 'lo-fi-hip-hop') return 'relaxed lo-fi drum groove';
+  if (g === 'jazz') return 'brushed jazz drum kit';
+  if (g === 'orchestral' || g === 'cinematic') return 'cinematic percussion and timpani hits';
+  if (NO_DRUM_GENRES.has(g)) return null;
+  return 'tight acoustic drum kit';
+}
+
+/** A wordless VOCAL texture descriptor when the analysis calls for one, else null. */
+function vocalLayer(a: VideoAnalysis): string | null {
+  switch (a.vocalPresence) {
+    case 'choir-pads':        return 'wordless choir pads';
+    case 'backing-harmonies': return 'soft wordless backing vocal harmonies';
+    case 'vocal-chops':       return 'rhythmic chopped vocal samples';
+    case 'humming':           return 'gentle wordless humming melody';
+    case 'scat':              return 'improvised jazz scat vocals';
+    default:                  return null;
+  }
+}
+
+/**
+ * Track-wide musical direction. Guarantees a layered arrangement: an explicit
+ * BASS layer and a MELODY/HARMONY layer are ALWAYS present (≥2 layers), with
+ * DRUMS added when appropriate and a wordless VOCAL texture when the analysis
+ * asks for one — so every score carries at least two (usually three) of
+ * bass / drums / melody / vocals.
+ */
 function buildGlobalStyles(a: VideoAnalysis): { positive: string[]; negative: string[] } {
+  const drums = drumLayer(a);
+  const vocals = vocalLayer(a);
+
+  // Layer descriptors come FIRST so the 20-style cap never drops them.
+  const layers = [
+    bassLayer(a.genre),                    // bass (always)
+    'clear melodic lead',                  // melody (always)
+    'rich harmonic texture',               // harmony (always)
+    ...(drums ? [drums] : []),             // drums (when appropriate)
+    ...(vocals ? [vocals] : []),           // wordless vocals (when appropriate)
+  ];
+
   // musicalRecommendation and sonicTexture can exceed 100 chars — split at a natural boundary.
   const recParts = a.musicalRecommendation
     ? splitStyle(a.musicalRecommendation).filter(p => !VISUAL_LEAK.test(p))
@@ -194,6 +251,7 @@ function buildGlobalStyles(a: VideoAnalysis): { positive: string[]; negative: st
   const texPart = clean(a.sonicTexture);
 
   const positive = dedupe([
+    ...layers,
     a.genre,
     a.mood,
     `${a.bpm} BPM`,
@@ -213,8 +271,10 @@ function buildGlobalStyles(a: VideoAnalysis): { positive: string[]; negative: st
     clean(a.dynamicArc) ?? '',
   ]).filter(Boolean).slice(0, MAX_GLOBAL_STYLES);
 
-  // Always instrumental; add contextual avoidances.
-  const negative = ['vocals', 'lyrics', 'spoken word'];
+  // Wordless (no lyrics/speech). Only forbid sung vocals entirely when the
+  // analysis wants none — otherwise allow the wordless vocal texture above.
+  const negative = ['lyrics', 'spoken word'];
+  if (!vocals) negative.push('vocals');
   if (a.audioDialogueDominant || a.musicRole === 'background-underscore') {
     negative.push('loud lead melody', 'dense mix');
   }

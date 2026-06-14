@@ -1,3 +1,8 @@
+export type {
+  DAWLibraryItem, DAWLibraryGroup, DAWClip, DAWTrack, DAWProject, DAWTransportState,
+  DAWToolMode, EffectType, Effect, MixerInsert,
+} from './daw';
+
 export type WorkflowStep =
   | 'idle'
   | 'uploading'
