@@ -2,6 +2,7 @@
 
 import type { DAWProject, Effect, EffectType, MixerInsert } from '@/types/daw';
 import { EFFECT_LABELS, EFFECT_PARAM_SPECS } from '@/lib/audio/dawGraph';
+import { Knob } from './Knob';
 
 interface MixerProps {
   project: DAWProject;
@@ -84,6 +85,63 @@ function InsertStrip({
   );
 }
 
+/** Small live preview of an A-D-S-R contour. */
+function AdsrCurve({ params }: { params: Record<string, number> }) {
+  const W = 150, H = 44, pad = 3;
+  const a = params.attack ?? 0.1, d = params.decay ?? 0.2, s = params.sustain ?? 0.5, r = params.release ?? 0.3;
+  const hold = 0.35; // fixed visual sustain-hold width (in "seconds")
+  const total = a + d + hold + r || 1;
+  const yFor = (lvl: number) => H - pad - lvl * (H - 2 * pad);
+  const xa = (a / total) * W;
+  const xd = ((a + d) / total) * W;
+  const xs = ((a + d + hold) / total) * W;
+  const pts = [
+    [0, yFor(0)],
+    [xa, yFor(1)],
+    [xd, yFor(s)],
+    [xs, yFor(s)],
+    [W, yFor(0)],
+  ];
+  return (
+    <svg width="100%" height={H} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="rounded bg-navy-950">
+      <polyline
+        points={pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ')}
+        fill="none" stroke="#ffcc18" strokeWidth={1.5} strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function AdsrEffectBody({
+  insert, eff, onUpdateEffectParam,
+}: {
+  insert: MixerInsert;
+  eff: Effect;
+  onUpdateEffectParam: (insertId: string, effectId: string, key: string, value: number) => void;
+}) {
+  const specs = EFFECT_PARAM_SPECS['filter-adsr'];
+  const fmt = (key: string) => (v: number) =>
+    key === 'cutoff' ? `${Math.round(v)}` : key === 'resonance' ? v.toFixed(1) : `${Math.round(v * 1000)}`;
+  return (
+    <div className="space-y-2">
+      <AdsrCurve params={eff.params} />
+      <div className="flex flex-wrap justify-between gap-1">
+        {specs.map(([key, label, min, max, step]) => (
+          <Knob
+            key={key}
+            label={label}
+            value={eff.params[key]}
+            min={min} max={max} step={step}
+            format={fmt(key)}
+            onChange={(v) => onUpdateEffectParam(insert.id, eff.id, key, v)}
+          />
+        ))}
+      </div>
+      <p className="text-[8px] text-cream-600">Envelope re-triggers each bar; A/D/S/R/Amount apply on next play.</p>
+    </div>
+  );
+}
+
 function EffectRack({
   insert, onRemoveEffect, onToggleEffect, onUpdateEffectParam,
 }: {
@@ -129,21 +187,25 @@ function EffectRack({
                   </svg>
                 </button>
               </div>
-              <div className="grid grid-cols-2 gap-x-3 gap-y-1">
-                {specs.map(([key, label, min, max, step]) => (
-                  <label key={key} className="flex items-center gap-1.5">
-                    <span className="w-8 flex-shrink-0 text-[9px] text-cream-500">{label}</span>
-                    <input
-                      type="range" min={min} max={max} step={step} value={eff.params[key]}
-                      onChange={e => onUpdateEffectParam(insert.id, eff.id, key, parseFloat(e.target.value))}
-                      className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-navy-700 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#ffcc18]"
-                    />
-                    <span className="w-8 flex-shrink-0 text-right text-[9px] tabular-nums text-cream-400">
-                      {eff.params[key]}
-                    </span>
-                  </label>
-                ))}
-              </div>
+              {eff.type === 'filter-adsr' ? (
+                <AdsrEffectBody insert={insert} eff={eff} onUpdateEffectParam={onUpdateEffectParam} />
+              ) : (
+                <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+                  {specs.map(([key, label, min, max, step]) => (
+                    <label key={key} className="flex items-center gap-1.5">
+                      <span className="w-8 flex-shrink-0 text-[9px] text-cream-500">{label}</span>
+                      <input
+                        type="range" min={min} max={max} step={step} value={eff.params[key]}
+                        onChange={e => onUpdateEffectParam(insert.id, eff.id, key, parseFloat(e.target.value))}
+                        className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-navy-700 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-[#ffcc18]"
+                      />
+                      <span className="w-8 flex-shrink-0 text-right text-[9px] tabular-nums text-cream-400">
+                        {eff.params[key]}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
           );
         })}

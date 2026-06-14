@@ -9,8 +9,10 @@ export function getAnalysisProvider(): VideoAnalysisProvider {
 }
 
 export function getMusicProvider(): MusicGenerationProvider {
-  const provider = process.env.MUSIC_PROVIDER ?? 'mock';
+  // Default to the Music API (layered, sectioned compositions) — best quality.
+  const provider = process.env.MUSIC_PROVIDER ?? 'elevenmusic';
   if (provider === 'elevenmusic') return new ElevenMusicProvider();
   if (provider === 'elevenlabs') return new ElevenLabsProvider();
-  return new MockMusicProvider();
+  if (provider === 'mock') return new MockMusicProvider();
+  return new ElevenMusicProvider();
 }

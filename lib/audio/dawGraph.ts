@@ -8,6 +8,7 @@ export const EFFECT_LABELS: Record<EffectType, string> = {
   delay: 'Delay',
   compressor: 'Compressor',
   distortion: 'Distortion',
+  'filter-adsr': 'Filter Envelope',
 };
 
 export const EFFECT_DEFAULTS: Record<EffectType, Record<string, number>> = {
@@ -16,6 +17,8 @@ export const EFFECT_DEFAULTS: Record<EffectType, Record<string, number>> = {
   delay:      { time: 0.3, feedback: 0.3, mix: 0.3 }, // s / 0..0.9 / 0..1
   compressor: { threshold: -24, ratio: 4, attack: 0.003, release: 0.25 },
   distortion: { amount: 0.3, mix: 1 },                // 0..1 drive / wet
+  // Tempo-synced lowpass envelope: cutoff sweeps each bar following A-D-S-R.
+  'filter-adsr': { attack: 0.08, decay: 0.2, sustain: 0.5, release: 0.3, cutoff: 700, resonance: 6, amount: 0.75 },
 };
 
 // Param UI descriptors: [key, label, min, max, step]
@@ -44,7 +47,18 @@ export const EFFECT_PARAM_SPECS: Record<EffectType, [string, string, number, num
     ['amount', 'Drive', 0, 1, 0.01],
     ['mix', 'Mix', 0, 1, 0.01],
   ],
+  'filter-adsr': [
+    ['attack', 'A', 0.005, 1, 0.005],
+    ['decay', 'D', 0.005, 1, 0.005],
+    ['sustain', 'S', 0, 1, 0.01],
+    ['release', 'R', 0.005, 1, 0.005],
+    ['cutoff', 'Cutoff', 100, 8000, 10],
+    ['resonance', 'Res', 0.1, 20, 0.1],
+    ['amount', 'Amount', 0, 1, 0.01],
+  ],
 };
+
+const MAX_FILTER_CUTOFF = 12000;
 
 export function defaultEffectParams(type: EffectType): Record<string, number> {
   return { ...EFFECT_DEFAULTS[type] };
@@ -84,7 +98,13 @@ export interface BuiltEffect {
   update: (params: Record<string, number>) => void;
 }
 
-export function buildEffect(ctx: BaseAudioContext, effect: Effect): BuiltEffect {
+/** Runtime context an effect may need (tempo-synced envelopes, scheduling anchor). */
+export interface EffectBuildOpts {
+  bpm: number;
+  startTime: number; // AudioContext time at which playback begins
+}
+
+export function buildEffect(ctx: BaseAudioContext, effect: Effect, opts: EffectBuildOpts): BuiltEffect {
   const p = effect.params;
   switch (effect.type) {
     case 'eq': {
@@ -167,6 +187,49 @@ export function buildEffect(ctx: BaseAudioContext, effect: Effect): BuiltEffect 
         },
       };
     }
+    case 'filter-adsr': {
+      // Lowpass filter whose cutoff is swept by an ADSR envelope, re-triggered
+      // once per bar (tempo-synced). Cutoff base + resonance are live-editable;
+      // the envelope shape (A/D/S/R/amount) is rendered on each play/restart.
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.Q.value = p.resonance;
+
+      const scheduleEnvelope = (params: Record<string, number>) => {
+        const { attack, decay, sustain, release, cutoff, amount } = params;
+        const barLen = Math.max(0.25, (60 / opts.bpm) * 4);
+        const peakHz = Math.min(MAX_FILTER_CUTOFF, cutoff + amount * (MAX_FILTER_CUTOFF - cutoff));
+        const sustainHz = cutoff + (peakHz - cutoff) * sustain;
+        const freq = filter.frequency;
+        try { freq.cancelScheduledValues(opts.startTime); } catch { /* offline edge */ }
+
+        // Schedule enough bars to cover a long track (capped).
+        const cycles = 256;
+        for (let c = 0; c < cycles; c++) {
+          const t0 = opts.startTime + c * barLen;
+          const aEnd = t0 + Math.min(attack, barLen * 0.4);
+          const dEnd = aEnd + Math.min(decay, barLen * 0.4);
+          const relStart = Math.max(dEnd, t0 + barLen - Math.min(release, barLen * 0.4));
+          freq.setValueAtTime(cutoff, t0);
+          freq.linearRampToValueAtTime(peakHz, aEnd);
+          freq.linearRampToValueAtTime(sustainHz, dEnd);
+          freq.setValueAtTime(sustainHz, relStart);
+          freq.linearRampToValueAtTime(cutoff, t0 + barLen);
+        }
+      };
+
+      scheduleEnvelope(p);
+
+      return {
+        input: filter, output: filter,
+        update: (np) => {
+          // Live: resonance applies instantly. Cutoff/envelope changes re-render
+          // the schedule (cheap; AudioParam events are replaced from startTime).
+          filter.Q.value = np.resonance;
+          scheduleEnvelope(np);
+        },
+      };
+    }
   }
 }
 
@@ -194,13 +257,18 @@ export function trackActive(muted: boolean, solo: boolean, anyTrackSolo: boolean
  * masterGain, and masterGain to the context destination. Returns the structures
  * needed for live updates and for routing track gains.
  */
-export function buildMixGraph(ctx: BaseAudioContext, project: DAWProject): {
+export function buildMixGraph(ctx: BaseAudioContext, project: DAWProject, opts?: { startTime?: number }): {
   master: GainNode;
   inserts: Map<string, BuiltInsert>;
 } {
   const master = ctx.createGain();
   master.gain.value = 1;
   master.connect(ctx.destination);
+
+  const effectOpts: EffectBuildOpts = {
+    bpm: project.bpm,
+    startTime: opts?.startTime ?? (typeof (ctx as AudioContext).currentTime === 'number' ? ctx.currentTime : 0),
+  };
 
   const anyInsertSolo = project.inserts.some(i => i.solo && i.id !== 'master');
   const inserts = new Map<string, BuiltInsert>();
@@ -213,7 +281,7 @@ export function buildMixGraph(ctx: BaseAudioContext, project: DAWProject): {
 
     for (const eff of insert.effects) {
       if (eff.enabled === false) continue;
-      const be = buildEffect(ctx, eff);
+      const be = buildEffect(ctx, eff, effectOpts);
       node.connect(be.input);
       node = be.output;
       builtEffects.set(eff.id, be);

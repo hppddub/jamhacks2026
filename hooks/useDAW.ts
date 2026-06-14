@@ -6,6 +6,7 @@ import {
   buildMixGraph, defaultEffectParams, insertActive, trackActive,
   type BuiltInsert,
 } from '@/lib/audio/dawGraph';
+import { stretchAudioBuffer } from '@/lib/audio/timeStretch';
 import type {
   DAWClip, DAWLibraryItem, DAWProject, DAWTrack, DAWTransportState,
   EffectType, MixerInsert,
@@ -15,6 +16,12 @@ const DEFAULT_BPM = 120;
 const DEFAULT_CLIP_DURATION = 30;
 const MIN_TOTAL_DURATION = 60;
 const LOOKAHEAD = 0.06; // s — schedule slightly ahead so the clock and audio align
+const REFERENCE_BPM = 120; // BPM at which playback runs at native speed (rate 1.0)
+
+/** BPM → playback-rate multiplier (higher BPM = faster). */
+function bpmToRate(bpm: number): number {
+  return Math.max(0.25, Math.min(4, bpm / REFERENCE_BPM));
+}
 
 function makeInitialInserts(): MixerInsert[] {
   const inserts: MixerInsert[] = [
@@ -129,19 +136,38 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const buffersRef = useRef<Map<string, AudioBuffer>>(new Map());
+  const stretchedBuffersRef = useRef<Map<string, AudioBuffer>>(new Map()); // keyed `url@rate`
   const clipSourcesRef = useRef<Map<string, AudioBufferSourceNode[]>>(new Map());
   const trackGainsRef = useRef<Map<string, GainNode>>(new Map());
   const insertsRef = useRef<Map<string, BuiltInsert>>(new Map());
   const playStartCtxRef = useRef(0);
   const playStartOffsetRef = useRef(0);
+  const playRateRef = useRef(1);
   const rafRef = useRef<number | null>(null);
   const currentTimeRef = useRef(0);
   const projectRef = useRef(project);
   const transportRef = useRef<DAWTransportState>('stopped');
 
   useEffect(() => { projectRef.current = project; }, [project]);
+  // transportRef is also set imperatively in play/pause/stop so the RAF loop
+  // never races a not-yet-committed effect; this effect is just a safety sync.
   useEffect(() => { transportRef.current = transport; }, [transport]);
   useEffect(() => { currentTimeRef.current = currentTime; }, [currentTime]);
+
+  /** Resolve the playable buffer for a clip at the current rate (pitch-preserved stretch, cached). */
+  const getPlayBuffer = useCallback((url: string, rate: number): AudioBuffer | null => {
+    const orig = buffersRef.current.get(url);
+    if (!orig) return null;
+    if (Math.abs(rate - 1) < 0.001) return orig;
+    const key = `${url}@${rate.toFixed(3)}`;
+    const cached = stretchedBuffersRef.current.get(key);
+    if (cached) return cached;
+    const ctx = audioCtxRef.current;
+    if (!ctx) return orig;
+    const stretched = stretchAudioBuffer(ctx, orig, rate);
+    stretchedBuffersRef.current.set(key, stretched);
+    return stretched;
+  }, []);
 
   // Build initial tracks from library items (durations loaded async)
   useEffect(() => {
@@ -167,10 +193,12 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
     const tick = () => {
       const ctx = audioCtxRef.current;
       if (!ctx || transportRef.current !== 'playing') return;
-      const t = ctx.currentTime - playStartCtxRef.current + playStartOffsetRef.current;
+      // Clock advances at rate × wall-time so the ruler stays in project seconds.
+      const t = (ctx.currentTime - playStartCtxRef.current) * playRateRef.current + playStartOffsetRef.current;
       const total = projectRef.current.totalDurationSeconds;
       if (t >= total) {
         stopRaf();
+        transportRef.current = 'stopped';
         setTransport('stopped');
         setCurrentTime(0);
         currentTimeRef.current = 0;
@@ -212,6 +240,7 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
   const play = useCallback(async () => {
     const proj = projectRef.current;
     const offset = currentTimeRef.current;
+    const rate = bpmToRate(proj.bpm);
 
     setLoadingAudio(true);
     if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
@@ -223,12 +252,16 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
     const urls = new Set<string>();
     for (const track of proj.tracks) for (const clip of track.clips) urls.add(clip.audioUrl);
     await Promise.all([...urls].map(u => ensureBuffer(u, ctx, buffersRef.current)));
+    // Yield once so the loading state can paint before any (CPU-heavy) time-stretch.
+    if (Math.abs(rate - 1) >= 0.001) await new Promise(r => setTimeout(r, 0));
     setLoadingAudio(false);
 
     stopAllSources();
 
-    // Build mixer graph (master + inserts + effects)
-    const { inserts } = buildMixGraph(ctx, proj);
+    const startAt = ctx.currentTime + LOOKAHEAD;
+
+    // Build mixer graph (master + inserts + effects); tempo-synced envelopes anchor to startAt.
+    const { inserts } = buildMixGraph(ctx, proj, { startTime: startAt });
     insertsRef.current = inserts;
 
     // Build per-track gains, route to assigned insert
@@ -243,15 +276,16 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
       trackGainsRef.current.set(track.id, g);
     }
 
-    const startAt = ctx.currentTime + LOOKAHEAD;
     playStartCtxRef.current = startAt;
     playStartOffsetRef.current = offset;
+    playRateRef.current = rate;
 
     for (const track of proj.tracks) {
       const g = trackGainsRef.current.get(track.id);
       if (!g) continue;
       for (const clip of track.clips) {
-        const buf = buffersRef.current.get(clip.audioUrl);
+        // Pitch-preserved buffer at the current tempo; its real length = clipDuration / rate.
+        const buf = getPlayBuffer(clip.audioUrl, rate);
         if (!buf) continue;
         const clipEnd = clip.startSeconds + clip.durationSeconds;
         if (clipEnd <= offset) continue;
@@ -259,12 +293,13 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
         const src = ctx.createBufferSource();
         src.buffer = buf;
         src.connect(g);
+        // Real (wall-clock) seconds = project seconds / rate.
         if (clip.startSeconds >= offset) {
-          src.start(startAt + (clip.startSeconds - offset), 0, clip.durationSeconds);
+          src.start(startAt + (clip.startSeconds - offset) / rate, 0, clip.durationSeconds / rate);
         } else {
-          const trim = offset - clip.startSeconds;
-          const remaining = clip.durationSeconds - trim;
-          if (remaining > 0) src.start(startAt, trim, remaining);
+          const trimProj = offset - clip.startSeconds;
+          const remainingProj = clip.durationSeconds - trimProj;
+          if (remainingProj > 0) src.start(startAt, trimProj / rate, remainingProj / rate);
         }
         const arr = clipSourcesRef.current.get(clip.id) ?? [];
         arr.push(src);
@@ -272,14 +307,16 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
       }
     }
 
+    transportRef.current = 'playing'; // set before RAF so the loop doesn't bail on frame 1
     setTransport('playing');
     startRaf();
-  }, [stopAllSources, startRaf]);
+  }, [stopAllSources, startRaf, getPlayBuffer]);
 
   const pause = useCallback(() => {
     stopRaf();
     stopAllSources();
     audioCtxRef.current?.suspend();
+    transportRef.current = 'paused';
     setTransport('paused');
   }, [stopRaf, stopAllSources]);
 
@@ -287,6 +324,7 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
     stopRaf();
     stopAllSources();
     audioCtxRef.current?.suspend();
+    transportRef.current = 'stopped';
     setTransport('stopped');
     setCurrentTime(0);
     currentTimeRef.current = 0;
@@ -299,16 +337,18 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
     if (transportRef.current === 'playing') {
       stopRaf();
       stopAllSources();
+      transportRef.current = 'paused';
       setTransport('paused');
       setTimeout(() => play(), 0);
     }
   }, [stopRaf, stopAllSources, play]);
 
-  // Restart playback in place (after a structural graph change while playing).
+  // Restart playback in place (after a structural graph / tempo change while playing).
   const restartIfPlaying = useCallback(() => {
     if (transportRef.current !== 'playing') return;
     stopRaf();
     stopAllSources();
+    transportRef.current = 'paused';
     setTransport('paused');
     setTimeout(() => play(), 0);
   }, [stopRaf, stopAllSources, play]);
@@ -394,7 +434,9 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
 
   const setBpm = useCallback((bpm: number) => {
     setProject(prev => ({ ...prev, bpm: Math.max(40, Math.min(240, bpm)) }));
-  }, []);
+    // Re-render the stretched buffers at the new tempo and resume in place.
+    restartIfPlaying();
+  }, [restartIfPlaying]);
 
   const zoomIn = useCallback(() => setPxPerSecond(z => Math.min(400, z * 1.5)), []);
   const zoomOut = useCallback(() => setPxPerSecond(z => Math.max(20, z / 1.5)), []);
@@ -469,7 +511,9 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
   const exportMix = useCallback(async () => {
     const proj = projectRef.current;
     const sr = 44100;
-    const totalSamples = Math.ceil(proj.totalDurationSeconds * sr);
+    const rate = bpmToRate(proj.bpm);
+    // Rendered timeline is compressed/expanded by the tempo.
+    const totalSamples = Math.ceil((proj.totalDurationSeconds / rate) * sr);
     const offCtx = new OfflineAudioContext(2, totalSamples, sr);
 
     const { inserts } = buildMixGraph(offCtx, proj);
@@ -483,21 +527,22 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
       g.connect(target ? target.input : offCtx.destination);
 
       for (const clip of track.clips) {
-        let buf = buffersRef.current.get(clip.audioUrl);
-        if (!buf) {
+        let orig = buffersRef.current.get(clip.audioUrl);
+        if (!orig) {
           try {
             const res = await fetch(clip.audioUrl);
             const ab = await res.arrayBuffer();
             const tmp = new AudioContext({ sampleRate: sr });
-            buf = await tmp.decodeAudioData(ab);
+            orig = await tmp.decodeAudioData(ab);
             await tmp.close();
-            buffersRef.current.set(clip.audioUrl, buf);
+            buffersRef.current.set(clip.audioUrl, orig);
           } catch { continue; }
         }
+        const buf = stretchAudioBuffer(offCtx, orig, rate); // pitch-preserved at tempo
         const src = offCtx.createBufferSource();
         src.buffer = buf;
         src.connect(g);
-        src.start(clip.startSeconds, 0, clip.durationSeconds);
+        src.start(clip.startSeconds / rate, 0, clip.durationSeconds / rate);
       }
     }
 

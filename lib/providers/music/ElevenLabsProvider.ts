@@ -56,21 +56,21 @@ export class ElevenLabsProvider implements MusicGenerationProvider {
     };
   }
 
-  // Splits a long duration into ≤30s segments and fetches them in parallel,
-  // then concatenates the raw MP3 buffers in order.
+  // Splits a long duration into ≤30s segments, fetches them ALL IN PARALLEL,
+  // then concatenates the raw MP3 buffers in original order.
   private async fetchMultiSegment(prompt: string, totalDuration: number): Promise<Buffer> {
     const segCount = Math.ceil(totalDuration / MAX_SEGMENT_SECONDS);
     const durations = Array.from({ length: segCount }, (_, i) =>
       Math.min(totalDuration - i * MAX_SEGMENT_SECONDS, MAX_SEGMENT_SECONDS)
     );
 
-    console.log(`[ElevenLabs] multi-segment: ${segCount} × ≤${MAX_SEGMENT_SECONDS}s for ${totalDuration}s video`);
+    console.log(`[ElevenLabs] multi-segment (parallel): ${segCount} × ≤${MAX_SEGMENT_SECONDS}s for ${totalDuration}s video`);
 
-    const buffers: Buffer[] = [];
-    for (let i = 0; i < durations.length; i++) {
-      console.log(`[ElevenLabs] segment ${i + 1}/${segCount}: ${durations[i]}s`);
-      buffers.push(await this.fetchSegment(prompt, durations[i]));
-    }
+    // Promise.all preserves array order, so concat order matches the timeline.
+    const buffers = await Promise.all(durations.map((d, i) => {
+      console.log(`[ElevenLabs] segment ${i + 1}/${segCount}: ${d}s`);
+      return this.fetchSegment(prompt, d);
+    }));
 
     return Buffer.concat(buffers);
   }

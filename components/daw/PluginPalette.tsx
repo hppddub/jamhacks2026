@@ -3,7 +3,7 @@
 import type { EffectType, MixerInsert } from '@/types/daw';
 import { EFFECT_LABELS } from '@/lib/audio/dawGraph';
 
-const EFFECT_ORDER: EffectType[] = ['eq', 'reverb', 'delay', 'compressor', 'distortion'];
+const EFFECT_ORDER: EffectType[] = ['eq', 'reverb', 'delay', 'compressor', 'distortion', 'filter-adsr'];
 
 const EFFECT_DESC: Record<EffectType, string> = {
   eq: '3-band shelving/peak EQ',
@@ -11,6 +11,7 @@ const EFFECT_DESC: Record<EffectType, string> = {
   delay: 'Feedback delay / echo',
   compressor: 'Dynamics compressor',
   distortion: 'Waveshaper drive',
+  'filter-adsr': 'ADSR filter envelope (knobs)',
 };
 
 interface PluginPaletteProps {

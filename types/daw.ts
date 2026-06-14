@@ -34,7 +34,7 @@ export interface DAWTrack {
 
 // ─── Mixer ────────────────────────────────────────────────────────────────────
 
-export type EffectType = 'eq' | 'reverb' | 'delay' | 'compressor' | 'distortion';
+export type EffectType = 'eq' | 'reverb' | 'delay' | 'compressor' | 'distortion' | 'filter-adsr';
 
 export interface Effect {
   id: string;

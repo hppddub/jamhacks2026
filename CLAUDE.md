@@ -11,7 +11,7 @@ This file is the persistent technical memory for Claude Code working on this pro
 **Context:** Built for JamHacks 2026. ElevenLabs is a track prize sponsor — ElevenLabs Sound Generation is the required production music API.
 **Status:** MVP complete. All phases implemented and building.
 - **Analysis is always real Gemini.** `getAnalysisProvider()` is hardcoded to return `new GeminiAnalyzer()`; it no longer reads `ANALYSIS_PROVIDER` and does not fall back to `MockAnalyzer`. A valid `GEMINI_API_KEY` is therefore **required** to run the analyze step. `MockAnalyzer` is still fully maintained but is currently **unreferenced by the factory** (kept for offline/dev use and as a reference implementation).
-- **Music defaults to mock** (`MockMusicProvider`), with ElevenLabs enabled via `MUSIC_PROVIDER=elevenlabs`.
+- **Music defaults to ElevenLabs Music** (`ElevenMusicProvider`, `MUSIC_PROVIDER` default `'elevenmusic'`) — the `/v1/music` composition-plan endpoint that renders layered, sectioned scores. `MockMusicProvider` (`mock`) and the sound-effects `ElevenLabsProvider` (`elevenlabs`) remain selectable. Requires the API key to have **Music Generation = Access**.
 - **Branding/theme:** The UI was rebranded ("Big change" + "rebrand to BananaMOV" commits) to a **navy + cream + banana-yellow (`#ffcc18`)** palette with a **light/dark theme toggle** (defaults to dark). The older zinc/amber palette described in earlier revisions of this file is gone — see the Visual Design System section for the current tokens.
 
 ---
@@ -53,9 +53,10 @@ jamhacks2026/
 │   ├── daw/
 │   │   ├── Transport.tsx                  ← play/pause/stop, BPM input, time display, zoom, mixer toggle
 │   │   ├── TrackLibrary.tsx               ← left panel: grouped audio sources, draggable into arrangement
-│   │   ├── PluginPalette.tsx             ← left panel "Plugins" section — adds effects to the selected insert
+│   │   ├── PluginPalette.tsx             ← left panel "Plugins" section — adds effects (incl. Filter Envelope) to the selected insert
 │   │   ├── Arrangement.tsx               ← scrollable timeline: bar/beat ruler+grid, sticky headers, snapping clips, insert routing, playhead
-│   │   ├── Mixer.tsx                      ← bottom-dock FL-style mixer: insert strips + selected insert's effect rack
+│   │   ├── Knob.tsx                       ← SVG rotary knob (drag/scroll) — used by the ADSR Filter Envelope plugin
+│   │   ├── Mixer.tsx                      ← bottom-dock FL-style mixer: insert strips + selected insert's effect rack (knobs + ADSR curve for filter-adsr)
 │   │   └── ExportPanel.tsx               ← collapsible export/import section (audio import, WAV mix, per-track MP3, save project JSON)
 │   └── ui/                                ← shadcn/ui generated (never edit manually)
 ├── hooks/
@@ -83,7 +84,8 @@ jamhacks2026/
 │   │       └── ReplicateProvider.ts       ← Replicate Demucs v4 stem separation (costs $)
 │   ├── audio/
 │   │   ├── generateTone.ts               ← PCM synthesis + lamejs MP3 encoding; generateStemMp3 for mock stems
-│   │   ├── dawGraph.ts                   ← DAW Web Audio: effect builders (EQ/reverb/delay/compressor/distortion), buildMixGraph(), effect param specs
+│   │   ├── dawGraph.ts                   ← DAW Web Audio: effect builders (EQ/reverb/delay/compressor/distortion/filter-adsr), buildMixGraph(), effect param specs
+│   │   ├── timeStretch.ts                ← pitch-preserving time-stretch (soundtouchjs) for BPM-as-tempo
 │   │   ├── ffmpegEnv.ts                  ← resolvedPath(): merges Windows HKCU PATH so winget ffmpeg is found (shared by Demucs + extractor)
 │   │   └── extractOriginalAudio.ts       ← ffmpeg: transcode a video's original audio track to browser-playable MP3 (best-effort)
 │   └── utils.ts                           ← cn, formatDuration, formatFileSize,
@@ -263,14 +265,15 @@ export function getAnalysisProvider(): VideoAnalysisProvider {
   return new GeminiAnalyzer();           // hardcoded — env var NOT consulted
 }
 export function getMusicProvider(): MusicGenerationProvider {
-  const provider = process.env.MUSIC_PROVIDER ?? 'mock';
+  const provider = process.env.MUSIC_PROVIDER ?? 'elevenmusic';   // default = Music API
   if (provider === 'elevenmusic') return new ElevenMusicProvider();
   if (provider === 'elevenlabs') return new ElevenLabsProvider();
-  return new MockMusicProvider();
+  if (provider === 'mock') return new MockMusicProvider();
+  return new ElevenMusicProvider();
 }
 ```
 - **`getAnalysisProvider()` always returns `new GeminiAnalyzer()`.** It does **not** read `ANALYSIS_PROVIDER` and never returns `MockAnalyzer`. `factory.ts` does not even import `MockAnalyzer`. (Because `GeminiAnalyzer`'s constructor throws without `GEMINI_API_KEY`, the analyze route will 500 with that message when the key is missing.)
-- `getMusicProvider()`: reads `process.env.MUSIC_PROVIDER` (default `'mock'`); returns `ElevenMusicProvider` for `'elevenmusic'` (Eleven Music, composition plan), `ElevenLabsProvider` for `'elevenlabs'` (sound effects), else `MockMusicProvider`.
+- `getMusicProvider()`: reads `process.env.MUSIC_PROVIDER` (**default `'elevenmusic'`**); returns `ElevenMusicProvider` for `'elevenmusic'` (Eleven Music, composition plan — the default), `ElevenLabsProvider` for `'elevenlabs'` (sound effects), `MockMusicProvider` for `'mock'`, else falls back to `ElevenMusicProvider`. `.env.local` sets `MUSIC_PROVIDER=elevenmusic`.
 - This is the ONLY place that imports concrete providers.
 - API routes call the factory and never import concrete providers directly.
 - **To re-enable mock analysis** (e.g. for offline dev), restore the env-driven branch in `getAnalysisProvider()` and import `MockAnalyzer` — no other file needs to change.
@@ -297,9 +300,10 @@ const uploadedFile = await this.ai.files.upload({
   config: { mimeType, displayName: metadata.filename },
 });
 
-// Poll until ACTIVE (max 30 attempts at 3s intervals = ~90 seconds)
-while (file.state === FileState.PROCESSING && attempts < 30) {
-  await delay(3000);
+// Poll until ACTIVE (max 40 attempts at 1.2s intervals = ~48s) — fast interval
+// so short clips clear quickly (was 3s × 30). 
+while (file.state === FileState.PROCESSING && attempts < 40) {
+  await delay(1200);
   file = await this.ai.files.get({ name: file.name! });
   attempts++;
 }
@@ -393,7 +397,7 @@ if (buffer.length === 0) throw new Error('ElevenLabs returned an empty audio res
 
 ### Multi-segment stitching (long videos)
 `MAX_SEGMENT_SECONDS = 30`. The Sound Generation endpoint caps a single request at 30s, so:
-- If `totalDuration > 30`, `fetchMultiSegment()` splits the duration into `ceil(total / 30)` chunks (`[30, 30, …, remainder]`), fetches each **sequentially** with the same prompt, and concatenates the raw MP3 buffers in order with `Buffer.concat`.
+- If `totalDuration > 30`, `fetchMultiSegment()` splits the duration into `ceil(total / 30)` chunks (`[30, 30, …, remainder]`), fetches them **all in parallel** via `Promise.all` (which preserves array order), and concatenates the raw MP3 buffers in order with `Buffer.concat`. (Parallelised for speed — was previously a sequential await loop.)
 - Otherwise a single `fetchSegment()` call is made.
 
 > Note: this contradicts the earlier "no multi-segment stitching" boundary — long-video stitching is now implemented (a naive MP3-byte concatenation, not a re-encode).
@@ -609,9 +613,9 @@ export interface StemSeparationProvider {
 ### LocalDemucsProvider (`lib/providers/stems/LocalDemucsProvider.ts`) — **Recommended free provider**
 - Runs `python -m demucs` as a subprocess using Node's `spawnSync` — no API key, no cost
 - Python executable: `process.env.DEMUCS_PYTHON_CMD ?? 'python'` (override with `DEMUCS_PYTHON_CMD=python3` if needed)
-- Command: `python -m demucs --mp3 --mp3-bitrate 320 -n htdemucs_ft --out {tmpDir} {localPath}`
+- Command: `python -m demucs --mp3 --mp3-bitrate 128 -n htdemucs --jobs 4 --segment 7 --out {tmpDir} {localPath}` — uses the single `htdemucs` model (≈4× faster than the `htdemucs_ft` bagging model), parallel `--jobs`, bounded `--segment` (**must be ≤ 7.8 s — `htdemucs` is a Transformer model with a hard segment cap**), and 128k MP3, all for speed.
 - **Requirements:** `pip install demucs` + `ffmpeg` in PATH
-- Output structure: `.tmp-demucs/{jobId}/htdemucs_ft/{trackName}/{stem}.mp3`
+- Output structure: `.tmp-demucs/{jobId}/htdemucs/{trackName}/{stem}.mp3`
   - Demucs filenames: `drums.mp3`, `bass.mp3`, `other.mp3`, `vocals.mp3`
   - `other` maps to `StemId = 'melody'`
 - Files copied to `public/stems/{jobId}/`, temp dir cleaned up after (also cleaned on error)
@@ -1064,8 +1068,8 @@ If env vars are absent, all factories default to `'mock'`. No API keys needed fo
 | Var | Default | Options |
 |---|---|---|
 | `ANALYSIS_PROVIDER` | `mock` | `mock`, `gemini` |
-| `MUSIC_PROVIDER` | `mock` | `mock`, `elevenlabs` |
-| `ELEVENLABS_API_KEY` | — | Required when `MUSIC_PROVIDER=elevenlabs` |
+| `MUSIC_PROVIDER` | `elevenmusic` | `elevenmusic`, `elevenlabs`, `mock` |
+| `ELEVENLABS_API_KEY` | — | Required when `MUSIC_PROVIDER=elevenmusic` or `elevenlabs` |
 | `GEMINI_API_KEY` | — | Required when `ANALYSIS_PROVIDER=gemini` |
 | `STEM_PROVIDER` | `mock` | `mock`, `local`, `replicate` |
 | `DEMUCS_PYTHON_CMD` | `python` | Override Python executable when `STEM_PROVIDER=local` (e.g. `python3`) |
@@ -1074,12 +1078,12 @@ If env vars are absent, all factories default to `'mock'`. No API keys needed fo
 | `REPLICATE_MODEL_VERSION` | — | Required when `STEM_PROVIDER=replicate`; find hash at replicate.com/lucataco/demucs |
 ### Notes
 - **`ANALYSIS_PROVIDER` is no longer read.** Analysis is hardcoded to Gemini, so `GEMINI_API_KEY` is effectively required to use the app end-to-end. (`.env.example` no longer lists `ANALYSIS_PROVIDER`.)
-- Only the **music** factory still branches on an env var (`MUSIC_PROVIDER`, default `'mock'`).
+- Only the **music** factory still branches on an env var (`MUSIC_PROVIDER`, **default `'elevenmusic'`** — the Music API; requires Music Generation access on the key).
 - **ffmpeg** (in PATH, or set `FFMPEG_CMD`) is used by both `STEM_PROVIDER=local` (Demucs) and the upload step's original-audio extraction. It is **optional** for upload: if absent, uploads still succeed and the "Video + Score" tab simply shows the original-audio toggle disabled. On Windows, `resolvedPath()` merges the user registry PATH so a freshly-winget-installed ffmpeg is found without restarting the dev server.
 
 | Var | Default | Options | Notes |
 |---|---|---|---|
-| `MUSIC_PROVIDER` | `mock` | `mock`, `elevenlabs`, `elevenmusic` | Selects the music provider |
+| `MUSIC_PROVIDER` | `elevenmusic` | `elevenmusic`, `elevenlabs`, `mock` | Selects the music provider; default is the Music API (layered composition plan) |
 | `GEMINI_API_KEY` | — | — | **Required** — analyze step always uses Gemini |
 | `ELEVENLABS_API_KEY` | — | — | Required when `MUSIC_PROVIDER=elevenlabs` **or** `elevenmusic` |
 | `ANALYSIS_PROVIDER` | *(ignored)* | — | Read by neither factory anymore |
@@ -1176,11 +1180,12 @@ Constants in the module: `MAX_TOTAL_SECONDS = 180`, `MIN_SECTION_SECONDS = 3`, `
 Result: section changes line up with the video's arc (structural alignment), not frame-accurate per scene-cut (the 3 s minimum precludes literal 2 s/3 s cuts, which is musically correct).
 
 ### Idea 3 — style construction (sound-only; local `VISUAL_LEAK` filter via `clean()`)
-- `positive_global_styles` (deduped, ≤20, each ≤100 chars): `genre`, overall `mood`, `${bpm} BPM`, `${keyMode} key`, `${pace} pace`, top 4 `instrumentSuggestions`, plus cleaned `sonicTexture` / `musicalRecommendation` / `rhythmicFeel` / `dynamicArc`.
-- `negative_global_styles`: always `['vocals','lyrics','spoken word']` + contextual avoidances — `+['loud lead melody','dense mix']` when `audioDialogueDominant` or `musicRole === 'background-underscore'`; `+['harsh distortion','aggressive percussion']` when `mood === 'calm'` or `energyLevel === 'low'`.
-- `positive_local_styles` (per section): segment `mood`, `${energyLevel} energy`, and a position hint — first → `'gentle introduction, sparse texture'`, peak (highest-energy block) → `'full arrangement, climactic'`, last → `'resolving, settling cadence'`. `negative_local_styles` is empty.
-- Instrumental enforced via **empty `lines` + negative `vocals`** (`force_instrumental` is prompt-mode only, so unused here).
+- **Layer-floor guarantee (richness):** `buildGlobalStyles()` prepends explicit instrument-layer descriptors so every score is layered — **always** a genre-appropriate `bassLayer()` (electric bass / upright / sub-bass / low cello foundation — never cello *as* bass) plus `'clear melodic lead'` and `'rich harmonic texture'` (≥2 layers), **plus** a `drumLayer()` when `drumsAppropriate !== false` and the genre has a rhythm section, **plus** a wordless `vocalLayer()` (choir pads / backing harmonies / vocal chops / humming / scat) when `vocalPresence !== 'none'`. Net: at least two, usually three, of bass/drums/melody/vocals. These layer styles come **first** so the ≤20 cap never drops them.
+- `positive_global_styles` (deduped, ≤20, each ≤100 chars): the layer descriptors above, then `genre`, `mood`, `${bpm} BPM`, `${keyMode} key`, `${pace} pace`, top 3 `instrumentSuggestions`, plus cleaned `sonicTexture` / `musicalRecommendation` / `rhythmicFeel` / `dynamicArc`.
+- `negative_global_styles`: always `['lyrics','spoken word']`; **`'vocals'` is added only when `vocalLayer()` is null** (so wordless choir/backing textures are allowed when the analysis asks for them). Plus contextual avoidances — `+['loud lead melody','dense mix']` when `audioDialogueDominant` or `musicRole === 'background-underscore'`; `+['harsh distortion','aggressive percussion']` when `mood === 'calm'` or `energyLevel === 'low'`.
+- `positive_local_styles` (per section): segment `mood`, `${energyLevel} energy`, the cleaned `musicalDescription` (for per-section texture), and a position hint — first → `'gentle introduction, sparse texture'`, peak → `'full arrangement, climactic'`, last → `'resolving, settling cadence'`. `negative_local_styles` is empty.
 - `section_name` = the segment's `label` (or `Section {n} — {mood}`), capped at 100 chars.
+- **Genre reweighting (analysis):** `ANALYSIS_PROMPT` now includes a "GENRE DIVERSITY" rule telling Gemini *not* to default to hip-hop / orchestral / cinematic, and to prefer everyday genres (pop, indie, rock, folk, acoustic, electronic, lo-fi-hip-hop, r-and-b, blues, jazz, ambient, world) that match the real vibe — opening up the full 18-genre range.
 
 ### Provider details (`ElevenMusicProvider`)
 - Constructor throws if `ELEVENLABS_API_KEY` missing.
@@ -1234,7 +1239,9 @@ Full viewport — no scrolling page. `h-screen flex-col overflow-hidden`:
 All DAW state lives in `useDAW(initialItems: DAWLibraryItem[])`. No TanStack Query — no server mutations in the DAW. The hook:
 
 - **Initialisation:** on mount, loads each seed library item's duration via a hidden `<Audio>` element; builds one `DAWTrack` per item with one `DAWClip` at `startSeconds=0`, routed to the `'master'` insert. Imported items (added later) only populate the library, not tracks.
-- **Audio engine + single clock:** Web Audio API (`AudioContext`). On `play()` it captures **one** `ctx.currentTime + LOOKAHEAD` (0.06 s) into `playStartCtxRef`, schedules all `AudioBufferSourceNode`s off that value, and the RAF loop derives `currentTime = ctx.currentTime - playStartCtxRef + offset`. **The playhead and the top-left readout both read this single `currentTime`**, so they stay paired and advance at true 1×. `pause()` suspends; `stop()` resets to 0; `seek()` restarts scheduling from the new offset if playing.
+- **Audio engine + single clock:** Web Audio API (`AudioContext`). On `play()` it captures **one** `ctx.currentTime + LOOKAHEAD` (0.06 s) into `playStartCtxRef`, schedules all `AudioBufferSourceNode`s off that value, and the RAF loop derives `currentTime = (ctx.currentTime − playStartCtxRef) × rate + offset`. **The playhead and the top-left readout both read this single `currentTime`**, so they stay paired. `pause()` suspends; `stop()` resets to 0; `seek()` restarts scheduling from the new offset if playing.
+  - **Playhead/pause race fix:** `transportRef.current` is set **imperatively** in `play()`/`pause()`/`stop()` (and the end-of-track branch), not just via a `useEffect`. Previously the first RAF tick could fire before the transport effect committed and bail (`transportRef !== 'playing'`), freezing the playhead and making pause look like a reset. Setting the ref imperatively before `startRaf()` removes the race.
+- **BPM = tempo (pitch-preserved):** `bpmToRate(bpm) = clamp(bpm/120, 0.25, 4)` (120 BPM = native speed). At play time each clip's buffer is rendered through `stretchAudioBuffer()` ([lib/audio/timeStretch.ts](lib/audio/timeStretch.ts), SoundTouch via `soundtouchjs`) to a **pitch-preserving** stretched buffer of length `clipDuration/rate`, cached by `url@rate` in `stretchedBuffersRef` (rate ≈ 1 bypasses stretching). Scheduling offsets are divided by `rate`; the RAF clock advances at `rate × wall-time` so the ruler stays in project seconds. Changing BPM while playing re-renders the buffers and `restartIfPlaying()`s. Export (`OfflineAudioContext`) stretches the same way and renders a timeline of length `total/rate`.
 - **Per-clip source tracking:** `clipSourcesRef: Map<clipId, AudioBufferSourceNode[]>`. `deleteClip()` (right-click) and `removeTrack()` immediately `.stop()` the matching nodes, so deleted audio goes silent **mid-playback** (fixes the prior "keeps playing" bug).
 - **Mixer graph:** built fresh each `play()` by `buildMixGraph()` (in `lib/audio/dawGraph.ts`). Signal path: `bufferSource → trackGain → insert.input → [effect chain] → insert.volume → insert.panner → master → destination`. Non-master inserts feed the master strip's input. `trackGain` applies track mute/solo/volume; the insert strip applies insert mute/solo/volume/pan.
 - **Live updates:** `refreshGains()` (a `useEffect` on `project.tracks`/`project.inserts`) sets every track & insert gain/pan live. Effect **param** tweaks call the built effect's `update()` closure live (no rebuild). **Structural** changes (add/remove/bypass effect, re-route a track's insert) call `restartIfPlaying()` which re-schedules in place.
@@ -1257,12 +1264,13 @@ Re-exported from `types/index.ts`. Initial project has `Master` + 4 empty insert
 
 ### Effects — `lib/audio/dawGraph.ts`
 
-Each effect compiles to a Web Audio sub-graph via `buildEffect(ctx, effect)` returning `{ input, output, update(params) }`:
+Each effect compiles to a Web Audio sub-graph via `buildEffect(ctx, effect, opts)` returning `{ input, output, update(params) }`. `opts: { bpm, startTime }` lets tempo-synced effects schedule against the playback anchor; `buildMixGraph(ctx, project, { startTime })` passes it through.
 - **eq** — three `BiquadFilter`s in series (lowshelf 320 Hz / peaking 1 kHz / highshelf 3.2 kHz), gains in dB.
 - **compressor** — `DynamicsCompressorNode` (threshold/ratio/attack/release).
 - **distortion** — `WaveShaperNode` (curve from `amount`) with wet/dry blend (`mix`).
 - **delay** — `DelayNode` + feedback `GainNode` loop, wet/dry (`time`/`feedback`/`mix`).
 - **reverb** — `ConvolverNode` with a generated noise-burst impulse (`decay`), wet/dry (`mix`).
+- **filter-adsr** (Filter Envelope) — lowpass `BiquadFilter` whose cutoff is swept by an **ADSR envelope re-triggered every bar** (tempo-synced via `opts.bpm`/`opts.startTime`, scheduled with `setValueAtTime`/`linearRampToValueAtTime`). Params: `attack/decay/sustain/release`, `cutoff` (base Hz), `resonance` (Q), `amount` (env depth). Live `update()` applies resonance instantly and re-schedules the envelope (which also lands on the next play/restart). Rendered with **rotary knobs** + a live ADSR-curve SVG in the mixer rack (not sliders).
 
 `EFFECT_DEFAULTS`, `EFFECT_LABELS`, and `EFFECT_PARAM_SPECS` (the `[key,label,min,max,step]` UI descriptors) live here too.
 
@@ -1276,7 +1284,9 @@ Each effect compiles to a Web Audio sub-graph via `buildEffect(ctx, effect)` ret
 
 **`Arrangement.tsx`** — dual-axis scroll. `Ruler` shows **bar numbers** (1,2,3…) with a beat-subdivided grid driven by BPM (`secondsPerBeat = 60/bpm`, 4/bar); clicking seeks. Each clip lane paints a beat/bar grid via layered `repeating-linear-gradient`. `Clip` drags via window-level mouse events and **snaps to the nearest beat** on drop; right-click deletes. Track header (`sticky left-0`, two rows when expanded): row 1 = collapse / dot / name / × remove; row 2 = M / S / **insert routing `<select>`**. Playhead is a yellow 1px line at `currentTime * pxPerSecond + HEADER_WIDTH`.
 
-**`Mixer.tsx`** — **bottom dock** (240 px, toggled). Horizontal `InsertStrip`s (name, fx/track counts, pan slider, vertical volume fader, M/S) — clicking selects a strip. Selected strip's `EffectRack` shows its effects with per-param sliders, bypass dot, and remove. "+ Insert" adds a strip; chevron closes the dock.
+**`Mixer.tsx`** — **bottom dock** (240 px, toggled). Horizontal `InsertStrip`s (name, fx/track counts, pan slider, vertical volume fader, M/S) — clicking selects a strip. Selected strip's `EffectRack` shows its effects with per-param sliders, bypass dot, and remove — **except `filter-adsr`**, which renders an `AdsrEffectBody` (a live ADSR-curve SVG + a row of rotary `Knob`s). "+ Insert" adds a strip; chevron closes the dock.
+
+**`Knob.tsx`** — reusable SVG rotary knob: 270° sweep, drag up/down or scroll to change, banana value-arc + indicator. Used by the Filter Envelope plugin.
 
 **`ExportPanel.tsx`** — collapsible "Export & Import" bar. **Import Audio** (`<input accept="audio/*">`) → object URL + duration → appended to the **Imported** library group via `onImportAudio`. Plus "Export Mix (WAV)", per-track MP3 buttons, "Save Project (.json)".
 
@@ -1288,6 +1298,7 @@ Each effect compiles to a Web Audio sub-graph via `buildEffect(ctx, effect)` ret
 
 - `TRACK_HEIGHT = 60` px, `COLLAPSED_HEIGHT = 28` px, `RULER_HEIGHT = 30` px, `HEADER_WIDTH = 200` px
 - `LOOKAHEAD = 0.06` s (schedule-ahead that the clock subtracts back out)
+- `REFERENCE_BPM = 120` (native playback speed; `bpmToRate` clamps the multiplier to `[0.25, 4]`)
 - `DEFAULT_BPM = 120`, `DEFAULT_CLIP_DURATION = 30` s, `MIN_TOTAL_DURATION = 60` s (padded +10 s beyond last clip)
 - Mixer dock height `240` px; initial inserts = Master + 4
 
@@ -1316,7 +1327,7 @@ All phases are complete. This checklist reflects the completed state.
 
 ### Phase 1 — Foundation ✅
 - [x] Scaffold Next.js 16 project
-- [x] Install dependencies: `@tanstack/react-query`, `@google/genai`, `lamejs`, `clsx`, `tailwind-merge`, `tw-animate-css` (the `elevenlabs` / `@elevenlabs/elevenlabs-js` SDKs are installed but no longer imported — the provider uses raw `fetch`)
+- [x] Install dependencies: `@tanstack/react-query`, `@google/genai`, `lamejs`, `clsx`, `tailwind-merge`, `tw-animate-css`, `soundtouchjs` (DAW pitch-preserving time-stretch; typed locally via `types/soundtouchjs.d.ts`) — (the `elevenlabs` / `@elevenlabs/elevenlabs-js` SDKs are installed but no longer imported — the provider uses raw `fetch`)
 - [x] Initialize shadcn/ui, add: `button`, `badge`, `card`
 - [x] Configure `.gitignore`
 - [x] Create `.env.local` and `.env.example`
