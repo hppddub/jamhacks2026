@@ -28,11 +28,11 @@ const ENERGY_BADGE: Record<string, string> = {
 };
 
 const AUDIO_TYPE_BADGE: Record<string, string> = {
-  dialogue:         'bg-teal-500/10 text-teal-400 border-teal-500/20',
-  sound_effects:    'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  background_music: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  ambient:          'bg-green-500/10 text-green-400 border-green-500/20',
-  silence:          'bg-navy-800/50 text-cream-300 border-navy-700',
+  dialogue:         'bg-[#4A3220]/10 text-[#4A3220] border-[#4A3220]/20',
+  sound_effects:    'bg-[#C39C0F]/10 text-[#C39C0F] border-[#C39C0F]/20',
+  background_music: 'bg-[#7CA0CB]/10 text-[#7CA0CB] border-[#7CA0CB]/20',
+  ambient:          'bg-[#6EA556]/10 text-[#6EA556] border-[#6EA556]/20',
+  silence:          'bg-[#1D2F45]/50 text-cream-300 border-[#1D2F45]',
 };
 
 function Badge({ label, className }: { label: string; className?: string }) {
@@ -143,40 +143,36 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-cream-300">
             Audio Profile
           </p>
-          {analysis.audioContentTypes && analysis.audioContentTypes.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {analysis.audioContentTypes.map((type) => (
-                <Badge
-                  key={type}
-                  label={type.replace('_', ' ')}
-                  className={AUDIO_TYPE_BADGE[type] ?? 'border-navy-700 bg-navy-800 text-cream-100'}
-                />
-              ))}
-            </div>
-          )}
           <div className="mb-2 flex flex-wrap gap-1.5">
+            {analysis.audioContentTypes?.map((type) => (
+              <Badge
+                key={type}
+                label={type.replace('_', ' ')}
+                className={AUDIO_TYPE_BADGE[type] ?? 'border-navy-700 bg-navy-800 text-cream-100'}
+              />
+            ))}
             {analysis.soundTexture && (
               <Badge
                 label={`${analysis.soundTexture} texture`}
-                className="border-orange-500/20 bg-orange-500/10 text-orange-400"
+                className="border-[#C39C0F]/20 bg-[#C39C0F]/10 text-[#C39C0F]"
               />
             )}
             {analysis.volumeDynamics && (
               <Badge
                 label={`${analysis.volumeDynamics} volume`}
-                className="border-purple-500/20 bg-purple-500/10 text-purple-400"
+                className="border-[#7CA0CB]/20 bg-[#7CA0CB]/10 text-[#7CA0CB]"
               />
             )}
             {analysis.dialogueTone && (
               <Badge
                 label={`${analysis.dialogueTone} tone`}
-                className="border-teal-500/20 bg-teal-500/10 text-teal-400"
+                className="border-[#4A3220]/20 bg-[#4A3220]/10 text-[#4A3220]"
               />
             )}
             {analysis.dialogueSentiment && (
               <Badge
                 label={`${analysis.dialogueSentiment} sentiment`}
-                className="border-sky-500/20 bg-sky-500/10 text-sky-400"
+                className="border-[#6EA556]/20 bg-[#6EA556]/10 text-[#6EA556]"
               />
             )}
           </div>

@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import { DropZone } from '@/components/upload/DropZone';
 import { VideoPreview } from '@/components/upload/VideoPreview';
 import { AnalysisCard } from '@/components/analysis/AnalysisCard';
@@ -9,7 +8,6 @@ import { DownloadButton } from '@/components/player/DownloadButton';
 import { StemPlayer } from '@/components/player/StemPlayer';
 import { useWorkflow } from '@/hooks/useWorkflow';
 import { ThemeToggle } from '@/components/ThemeToggle';
-import { VideoScorePlayer } from '@/components/player/VideoScorePlayer';
 import { useRef } from 'react';
 import Image from 'next/image';
 
@@ -91,7 +89,6 @@ export default function Home() {
   const isLoading = isUploading || isAnalyzing || isGenerating;
 
   const currentOrder = STEP_ORDER[step] ?? -1;
-  const [scoreTab, setScoreTab] = useState<'score' | 'video'>('score');
 
   return (
     <div className="min-h-screen bg-navy-950 text-cream-50">
@@ -184,10 +181,10 @@ export default function Home() {
             <div className="animate-fade-in">
               {/* Hero — exact from HTML reference */}
               <div className="text-center mb-16">
-                <h1 className="text-[48px] leading-[1.1] font-bold tracking-[-0.02em] text-[#7CA0CB] dark:text-cream-50 max-w-3xl mx-auto mb-4">
+                <h1 className="text-[48px] leading-[1.1] font-bold tracking-[-0.02em] text-[#4A3220] dark:text-cream-50 max-w-3xl mx-auto mb-4">
                   Score your video with AI
                 </h1>
-                <p className="text-lg leading-relaxed text-[#1D2F45] dark:text-cream-200 max-w-2xl mx-auto mb-12">
+                <p className="text-lg leading-relaxed text-[#6B5240] dark:text-cream-200 max-w-2xl mx-auto mb-12">
                   Intelligent energy analysis and mood mapping for cinematic audio synchronization.
                   Transform your visual narrative with procedural scoring that breathes.
                 </p>
@@ -202,16 +199,16 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Feature grid — exact from HTML reference */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Feature grid — full-width breakout from the max-w-3xl main */}
+              <div className="relative left-1/2 right-1/2 -ml-[50vw] -mr-[50vw] w-screen px-6 grid grid-cols-1 md:grid-cols-3 gap-6">
 
                 {/* Card 1 — Visual Arc Analysis */}
                 <div className="bento-card bg-white dark:bg-navy-900 border border-[#d2c5ab] dark:border-navy-700 p-8 rounded-2xl flex flex-col items-start h-full">
                   <div className="w-12 h-12 bg-[#cfe1fe] dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-6">
                     <span className="material-symbols-outlined text-[#4e6078] dark:text-blue-300">analytics</span>
                   </div>
-                  <h4 className="text-2xl font-semibold text-[#1D2F45] dark:text-cream-50 mb-2">Visual Arc Analysis</h4>
-                  <p className="text-sm leading-relaxed text-[#7CA0CB] dark:text-cream-400 grow">
+                  <h4 className="text-2xl font-semibold text-[#4A3220] dark:text-cream-50 mb-2">Visual Arc Analysis</h4>
+                  <p className="text-sm leading-relaxed text-[#6B5240] dark:text-cream-400 grow">
                     Our AI maps the emotional intensity of every frame, creating a dynamic energy profile for your entire sequence as well as key climax points.
                   </p>
                   <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-[#ffeadd] dark:bg-navy-800">
@@ -225,8 +222,8 @@ export default function Home() {
                   <div className="w-12 h-12 bg-[#a7e28b] dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-6">
                     <span className="material-symbols-outlined text-[#376a23] dark:text-green-300">memory</span>
                   </div>
-                  <h4 className="text-2xl font-semibold text-[#1D2F45] dark:text-cream-50 mb-2">Procedural Scoring</h4>
-                  <p className="text-sm leading-relaxed text-[#7CA0CB] dark:text-cream-400 grow">
+                  <h4 className="text-2xl font-semibold text-[#4A3220] dark:text-cream-50 mb-2">Procedural Scoring</h4>
+                  <p className="text-sm leading-relaxed text-[#6B5240] dark:text-cream-400 grow">
                     Generate unique, copyright-free musical compositions that evolve in real-time based on the pacing and cut-points of your video.
                   </p>
                   <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-[#ffeadd] dark:bg-navy-800">
@@ -240,8 +237,8 @@ export default function Home() {
                   <div className="w-12 h-12 bg-[#ffcc18] dark:bg-[#ffcc18]/20 rounded-xl flex items-center justify-center mb-6">
                     <span className="material-symbols-outlined text-[#745b00] dark:text-[#ffcc18]">sync</span>
                   </div>
-                  <h4 className="text-2xl font-semibold text-[#1D2F45] dark:text-cream-50 mb-2">Post Generation Editing</h4>
-                  <p className="text-sm leading-relaxed text-[#7CA0CB] dark:text-cream-400 grow">
+                  <h4 className="text-2xl font-semibold text-[#4A3220] dark:text-cream-50 mb-2">Post Generation Editing</h4>
+                  <p className="text-sm leading-relaxed text-[#6B5240] dark:text-cream-400 grow">
                     Export your synchronized project or just the generated soundtrack after editing it in our own studio to create the perfect, personalized score.
                   </p>
                   <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-[#ffeadd] dark:bg-navy-800">
@@ -296,6 +293,14 @@ export default function Home() {
         {/* Analysis result */}
         {analysis && (step === 'analyzed' || step === 'generating' || step === 'completed') && (
           <section className="animate-fade-in space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-navy-800" />
+              <span className="text-xs font-medium uppercase tracking-widest text-[#BD9A1F] dark:text-[#ffcc18]">
+                Your Analysis
+              </span>
+              <div className="h-px flex-1 bg-navy-800" />
+            </div>
+
             <AnalysisCard result={analysis} />
 
             {step === 'analyzed' && !error && (
@@ -316,7 +321,7 @@ export default function Home() {
           <section className="animate-fade-in space-y-6">
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-navy-800" />
-              <span className="text-xs font-medium uppercase tracking-widest text-[#ffcc18]">
+              <span className="text-xs font-medium uppercase tracking-widest text-[#BD9A1F] dark:text-[#ffcc18]">
                 Your Score
               </span>
               <div className="h-px flex-1 bg-navy-800" />
@@ -347,43 +352,20 @@ export default function Home() {
               )}
             </div>
 
-            {/* Tab switcher */}
-            <div className="flex rounded-lg border border-navy-700 bg-navy-900 p-1">
-              <button
-                onClick={() => setScoreTab('score')}
-                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                  scoreTab === 'score'
-                    ? 'bg-[#ffcc18] text-navy-950'
-                    : 'text-cream-300 hover:text-cream-100'
-                }`}
-              >
-                Score Only
-              </button>
-              <button
-                onClick={() => setScoreTab('video')}
-                className={`flex-1 rounded-md py-2 text-sm font-medium transition-colors ${
-                  scoreTab === 'video'
-                    ? 'bg-[#ffcc18] text-navy-950'
-                    : 'text-cream-300 hover:text-cream-100'
-                }`}
-              >
-                Score + Video
-              </button>
-            </div>
-
-            {scoreTab === 'score' ? (
-              <AudioPlayer src={score.audioUrl} />
-            ) : (
-              videoObjectUrl && (
-                <VideoScorePlayer videoUrl={videoObjectUrl} audioSrc={score.audioUrl} />
-              )
-            )}
             <ScoreOutput
               score={score}
               videoSrc={videoObjectUrl ?? ''}
               originalAudioUrl={originalAudioUrl}
             />
             <DownloadButton score={score} />
+
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-navy-800" />
+              <span className="text-xs font-medium uppercase tracking-widest text-[#BD9A1F] dark:text-[#ffcc18]">
+                Your Stems
+              </span>
+              <div className="h-px flex-1 bg-navy-800" />
+            </div>
 
             {/* Stem separation */}
             {stemStep === 'idle' && (
@@ -414,7 +396,7 @@ export default function Home() {
                 Happy with your score?{' '}
                 <button
                   onClick={reset}
-                  className="text-[#ffcc18] underline-offset-2 hover:underline"
+                  className="text-[#BD9A1F] underline-offset-2 hover:underline dark:text-[#ffcc18]"
                 >
                   Score another video
                 </button>

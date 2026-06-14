@@ -9,10 +9,10 @@ interface StemPlayerProps {
 }
 
 const STEM_STYLE: Record<StemId, { color: string; label: string; waveParams: [number, number, number] }> = {
-  drums:  { color: '#f97316', label: 'Drums & Percussion', waveParams: [0.7, 1.9, 2.1] },
-  bass:   { color: '#a855f7', label: 'Bass',               waveParams: [0.3, 0.6, 0.5] },
-  melody: { color: '#ffcc18', label: 'Melody & Harmony',   waveParams: [0.9, 0.4, 1.4] },
-  vocals: { color: '#2dd4bf', label: 'Vocals',             waveParams: [0.5, 1.1, 0.8] },
+  drums:  { color: '#ef4444', label: 'Drums & Percussion', waveParams: [0.7, 1.9, 2.1] },
+  bass:   { color: '#6EA556', label: 'Bass',               waveParams: [0.3, 0.6, 0.5] },
+  melody: { color: '#FFCC18', label: 'Melody & Harmony',   waveParams: [0.9, 0.4, 1.4] },
+  vocals: { color: '#7CA0CB', label: 'Vocals',             waveParams: [0.5, 1.1, 0.8] },
 };
 
 function StemRow({ stem }: { stem: Stem }) {

@@ -95,10 +95,10 @@ export function DropZone({ onFileSelect }: DropZoneProps) {
           </span>
         </div>
 
-        <h3 className="text-2xl font-semibold text-[#1D2F45] dark:text-cream-50 mb-2">
+        <h3 className="text-2xl font-semibold text-[#4A3220] dark:text-cream-50 mb-2">
           {isDragging ? 'Drop to upload' : 'Drop your master edit here'}
         </h3>
-        <p className="text-base text-[#7CA0CB] dark:text-cream-300 mb-8">
+        <p className="text-base text-[#6B5240] dark:text-cream-300 mb-8">
           MP4, MOV, or ProRes up to 100 MB
         </p>
         <button

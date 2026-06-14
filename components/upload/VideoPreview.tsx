@@ -24,7 +24,7 @@ export function VideoPreview({ file, objectUrl, onRemove, disabled, videoRef, hi
         src={objectUrl}
         controls={!hideControls}
         preload="metadata"
-        className="w-full max-h-64 bg-black"
+        className="w-full bg-black"
       />
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">
