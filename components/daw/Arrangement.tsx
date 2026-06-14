@@ -15,8 +15,6 @@ interface ArrangementProps {
   project: DAWProject;
   currentTime: number;
   pxPerSecond: number;
-  /** Scrollable/seekable timeline length (content + headroom). */
-  timelineDuration: number;
   toolMode: DAWToolMode;
   onSeek: (t: number) => void;
   onMoveClip: (clipId: string, newStart: number) => void;
@@ -384,13 +382,13 @@ function TrackRow({
 }
 
 export function Arrangement({
-  project, currentTime, pxPerSecond, timelineDuration, toolMode,
+  project, currentTime, pxPerSecond, toolMode,
   onSeek, onMoveClip, onDeleteClip, onTrimClipStart, onTrimClipEnd, onSplitClip,
   onToggleMute, onToggleSolo, onToggleCollapse, onSetVolume, onSetTrackInsert,
   onRemoveTrack, onDropItem,
 }: ArrangementProps) {
   void onSetVolume; // reserved for future inline track fader
-  const totalWidth = timelineDuration * pxPerSecond;
+  const totalWidth = project.totalDurationSeconds * pxPerSecond;
   const secondsPerBeat = 60 / project.bpm;
   const secondsPerBar = secondsPerBeat * 4;
   const pxPerBeat = secondsPerBeat * pxPerSecond;
@@ -434,11 +432,11 @@ export function Arrangement({
           <span className="text-[9px] uppercase tracking-widest text-cream-500">Bars</span>
         </div>
         <Ruler
-          totalDuration={timelineDuration}
+          totalDuration={project.totalDurationSeconds}
           pxPerSecond={pxPerSecond}
           secondsPerBar={secondsPerBar}
           pxPerBeat={pxPerBeat}
-          onSeek={(t) => onSeek(Math.min(t, timelineDuration))}
+          onSeek={(t) => onSeek(Math.min(t, project.totalDurationSeconds))}
         />
       </div>
 
