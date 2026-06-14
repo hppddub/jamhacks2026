@@ -62,7 +62,7 @@ export function TimelineBar({ segments, selectedIndex, onSegmentClick }: Timelin
                 ENERGY_BG[seg.energyLevel],
                 i === 0 && 'rounded-l-lg',
                 i === segments.length - 1 && 'rounded-r-lg',
-                i !== segments.length - 1 && 'border-r-2 border-[#E4D3B2]',
+                i !== segments.length - 1 && 'border-r-2 border-[#E4D3B2] dark:border-[#1D2F45]',
                 isClickable ? 'cursor-pointer hover:opacity-80' : 'hover:opacity-80',
                 isSelected && 'ring-2 ring-inset ring-white/70',
               )}
