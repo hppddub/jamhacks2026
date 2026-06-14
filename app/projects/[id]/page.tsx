@@ -6,8 +6,8 @@ import { buildPlayback } from '@/lib/projects/serialize';
 import { AnalysisCard } from '@/components/analysis/AnalysisCard';
 import { ScoreOutput } from '@/components/player/ScoreOutput';
 import { DownloadButton } from '@/components/player/DownloadButton';
-import { StemPlayer } from '@/components/player/StemPlayer';
 import { DeleteProjectButton } from '@/components/projects/DeleteProjectButton';
+import { ProjectStemSection } from '@/components/projects/ProjectStemSection';
 
 export const dynamic = 'force-dynamic';
 
@@ -124,6 +124,7 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
           <StemPlayer result={playback.stems} />
         </>
       )}
+      <ProjectStemSection projectId={project.id} initialStems={playback.stems} />
     </main>
   );
 }

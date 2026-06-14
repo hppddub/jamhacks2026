@@ -112,6 +112,11 @@ export async function insertProjectFile(file: NewProjectFileRow): Promise<void> 
   await db.insert(projectFiles).values(file);
 }
 
+/** Insert multiple project file rows in one statement. */
+export async function insertProjectFiles(files: NewProjectFileRow[]): Promise<void> {
+  if (files.length > 0) await db.insert(projectFiles).values(files);
+}
+
 /** Persist the DAW session JSON to a project's mix_state, ownership-checked. */
 export async function setProjectMixState(id: string, userId: string, mixState: unknown): Promise<boolean> {
   const updated = await db
