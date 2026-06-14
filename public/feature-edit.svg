@@ -1,0 +1,16 @@
+<svg viewBox="0 0 400 160" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Audio mixing sliders for post-generation editing">
+  <g stroke-linecap="round">
+    <!-- track 1 -->
+    <line x1="40" y1="40" x2="360" y2="40" stroke="#7CA0CB" stroke-opacity="0.35" stroke-width="4"/>
+    <line x1="40" y1="40" x2="150" y2="40" stroke="#6EA556" stroke-width="4"/>
+    <circle cx="150" cy="40" r="11" fill="#1D2F45" stroke="#6EA556" stroke-width="3"/>
+    <!-- track 2 -->
+    <line x1="40" y1="80" x2="360" y2="80" stroke="#7CA0CB" stroke-opacity="0.35" stroke-width="4"/>
+    <line x1="40" y1="80" x2="270" y2="80" stroke="#ffcc18" stroke-width="4"/>
+    <circle cx="270" cy="80" r="11" fill="#1D2F45" stroke="#ffcc18" stroke-width="3"/>
+    <!-- track 3 -->
+    <line x1="40" y1="120" x2="360" y2="120" stroke="#7CA0CB" stroke-opacity="0.35" stroke-width="4"/>
+    <line x1="40" y1="120" x2="210" y2="120" stroke="#7CA0CB" stroke-width="4"/>
+    <circle cx="210" cy="120" r="11" fill="#1D2F45" stroke="#7CA0CB" stroke-width="3"/>
+  </g>
+</svg>

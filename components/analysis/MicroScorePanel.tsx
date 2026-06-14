@@ -30,16 +30,16 @@ function ScoreBar({ label, value, negative = false }: BarProps) {
 
   return (
     <div className="flex items-center gap-2 text-xs">
-      <span className="w-44 shrink-0 truncate text-[#F8F0E2]/70" title={label}>
+      <span className="w-44 shrink-0 truncate text-[#4A3220]/80 dark:text-[#F8F0E2]/70" title={label}>
         {label}
       </span>
-      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#3a2718]">
+      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-[#CFBB92] dark:bg-[#3a2718]">
         <div
           className={`h-full rounded-full transition-all duration-300 ${color}`}
           style={{ width: `${p}%` }}
         />
       </div>
-      <span className="w-8 shrink-0 text-right tabular-nums text-[#F8F0E2]/70">
+      <span className="w-8 shrink-0 text-right tabular-nums text-[#4A3220]/80 dark:text-[#F8F0E2]/70">
         {p}
       </span>
     </div>
@@ -64,9 +64,9 @@ function Category({ title, avg, children }: CategoryProps) {
         aria-expanded={expanded}
         className="flex w-full items-center justify-between"
       >
-        <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-[#F8F0E2]/90">
+        <span className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-[#1D2F45]/90 dark:text-[#F8F0E2]/90">
           <svg
-            className={`h-3 w-3 shrink-0 text-[#F8F0E2]/60 transition-transform ${expanded ? '' : '-rotate-90'}`}
+            className={`h-3 w-3 shrink-0 text-[#4A3220]/60 dark:text-[#F8F0E2]/60 transition-transform ${expanded ? '' : '-rotate-90'}`}
             fill="none"
             viewBox="0 0 24 24"
             stroke="currentColor"
@@ -112,21 +112,21 @@ export function MicroScorePanel({ scores, label }: MicroScorePanelProps) {
     inv(co.missingDataRate), co.boundaryConfidence, co.crossFrameConsistency, co.reliabilityScore);
 
   return (
-    <div className="animate-fade-in mt-4 space-y-4 rounded-xl border border-[#6B5240] bg-[#4A3220]/80 p-5">
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+    <div className="animate-fade-in mt-4 space-y-4 rounded-xl border border-[#CFBB92] bg-[#EFE3CA] p-5 dark:border-[#6B5240] dark:bg-[#4A3220]/80">
+      <div className="flex items-center justify-between border-b border-[#CFBB92] pb-3 dark:border-[#6B5240]/50">
         <div>
-          <p className="text-sm font-semibold text-[#F8F0E2]">Micro-Segmentation Analysis</p>
-          <p className="text-xs text-[#F8F0E2]/50">{label}</p>
+          <p className="text-sm font-semibold text-[#1D2F45] dark:text-[#F8F0E2]">Micro-Segmentation Analysis</p>
+          <p className="text-xs text-[#4A3220]/60 dark:text-[#F8F0E2]/50">{label}</p>
         </div>
         <div className="text-right">
-          <p className="text-2xl font-bold text-[#FFCC18]">{pct(fo.finalClipScore)}</p>
-          <p className="text-xs text-[#F8F0E2]/50">clip score</p>
+          <p className="text-2xl font-bold text-[#BD9A1F] dark:text-[#FFCC18]">{pct(fo.finalClipScore)}</p>
+          <p className="text-xs text-[#4A3220]/60 dark:text-[#F8F0E2]/50">clip score</p>
         </div>
       </div>
 
       {/* Final output composite scores */}
-      <div className="rounded-lg border border-[#6B5240]/60 bg-[#3a2718]/50 p-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#F8F0E2]/70">Composite Outputs</p>
+      <div className="rounded-lg border border-[#CFBB92]/70 bg-[#E4D3B2]/50 p-3 dark:border-[#6B5240]/60 dark:bg-[#3a2718]/50">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#4A3220]/80 dark:text-[#F8F0E2]/70">Composite Outputs</p>
         <div className="grid gap-1 sm:grid-cols-2">
           <ScoreBar label="Segment Score" value={fo.segmentScore} />
           <ScoreBar label="Event Score" value={fo.eventScore} />
@@ -192,17 +192,17 @@ export function MicroScorePanel({ scores, label }: MicroScorePanelProps) {
 
         <Category title="Scene Understanding" avg={suAvg}>
           <div className="space-y-0.5 pb-1">
-            <p className="text-xs text-[#F8F0E2]/50">
-              <span className="text-[#F8F0E2]/70">Scene: </span>{su.sceneCategory}
+            <p className="text-xs text-[#4A3220]/60 dark:text-[#F8F0E2]/50">
+              <span className="text-[#4A3220]/80 dark:text-[#F8F0E2]/70">Scene: </span>{su.sceneCategory}
             </p>
-            <p className="text-xs text-[#F8F0E2]/50">
-              <span className="text-[#F8F0E2]/70">Environment: </span>{su.environmentType}
+            <p className="text-xs text-[#4A3220]/60 dark:text-[#F8F0E2]/50">
+              <span className="text-[#4A3220]/80 dark:text-[#F8F0E2]/70">Environment: </span>{su.environmentType}
             </p>
-            <p className="text-xs text-[#F8F0E2]/50">
-              <span className="text-[#F8F0E2]/70">Setting: </span>{su.indoorOutdoor}
+            <p className="text-xs text-[#4A3220]/60 dark:text-[#F8F0E2]/50">
+              <span className="text-[#4A3220]/80 dark:text-[#F8F0E2]/70">Setting: </span>{su.indoorOutdoor}
             </p>
-            <p className="text-xs text-[#F8F0E2]/50">
-              <span className="text-[#F8F0E2]/70">Activity: </span>{su.activityType}
+            <p className="text-xs text-[#4A3220]/60 dark:text-[#F8F0E2]/50">
+              <span className="text-[#4A3220]/80 dark:text-[#F8F0E2]/70">Activity: </span>{su.activityType}
             </p>
           </div>
           <ScoreBar label="Action Complexity" value={su.actionComplexity} />
@@ -259,8 +259,8 @@ export function MicroScorePanel({ scores, label }: MicroScorePanelProps) {
         </Category>
       </div>
 
-      <div className="border-t border-zinc-800 pt-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#F8F0E2]/70">
+      <div className="border-t border-[#CFBB92] pt-3 dark:border-[#6B5240]/50">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-[#4A3220]/80 dark:text-[#F8F0E2]/70">
           Safety / Moderation
         </p>
         <div className="grid gap-1 sm:grid-cols-2">

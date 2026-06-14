@@ -9,9 +9,14 @@ export function ThemeToggle() {
   const [mounted, setMounted] = useState(false);
 
   // After mount, read the persisted choice and reconcile state + DOM class.
+  // Deferred into rAF so the state update isn't synchronous within the effect
+  // body (avoids cascading renders) and still runs post-hydration.
   useEffect(() => {
-    setIsDark(localStorage.getItem('theme') !== 'light');
-    setMounted(true);
+    const id = requestAnimationFrame(() => {
+      setIsDark(localStorage.getItem('theme') !== 'light');
+      setMounted(true);
+    });
+    return () => cancelAnimationFrame(id);
   }, []);
 
   // Sync the DOM class whenever the React state changes (external system sync, no setState here)

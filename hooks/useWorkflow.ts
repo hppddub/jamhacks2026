@@ -201,5 +201,19 @@ export function useWorkflow() {
     setState(defaultState);
   }, [state.videoObjectUrl]);
 
-  return { state, selectFile, removeFile, upload, analyze, generate, separateStems, reset };
+  /** Step back one stage, keeping captured data so the user can redo a step. */
+  const goBack = useCallback(() => {
+    setState((prev) => {
+      const back: Partial<Record<WorkflowState['step'], WorkflowState['step']>> = {
+        completed: 'analyzed',
+        analyzed: 'uploaded',
+        uploaded: 'idle',
+      };
+      const target = back[prev.step];
+      if (!target) return prev;
+      return { ...prev, step: target, error: null };
+    });
+  }, []);
+
+  return { state, selectFile, removeFile, upload, analyze, generate, separateStems, reset, goBack };
 }

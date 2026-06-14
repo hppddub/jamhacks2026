@@ -1,4 +1,7 @@
+'use client';
+
 import { Button } from '@/components/ui/button';
+import { useToast } from '@/components/ui/Toast';
 import type { GeneratedScore } from '@/types';
 
 interface DownloadButtonProps {
@@ -6,8 +9,14 @@ interface DownloadButtonProps {
 }
 
 export function DownloadButton({ score }: DownloadButtonProps) {
+  const { toast } = useToast();
   return (
-    <a href={score.audioUrl} download={score.filename} className="block">
+    <a
+      href={score.audioUrl}
+      download={score.filename}
+      className="block"
+      onClick={() => toast('Download started')}
+    >
       <Button
         size="lg"
         className="w-full gap-2 border border-navy-700 bg-navy-800 text-cream-50 hover:bg-navy-700"
