@@ -26,20 +26,21 @@ const FEATURES: Feature[] = [
   {
     title: 'Save your projects',
     body: 'Keep every generation, named and organized, ready to revisit or refine.',
-    soon: true,
   },
   {
     title: 'Mix & master',
-    body: 'Shape your track with mixing, mastering, and filter envelopes — coming soon.',
-    soon: true,
+    body: 'Shape your track with mixing, mastering, and filter envelopes.',
   },
 ];
 
 export function FeatureSection() {
   return (
-    <section className="mx-auto max-w-5xl space-y-10 px-6 py-24">
+    <section
+      id="how-it-works"
+      className="mx-auto flex min-h-[calc(100svh-65px)] max-w-5xl scroll-mt-[65px] flex-col justify-between gap-10 px-6 py-10"
+    >
       <div className="space-y-3 text-center">
-        <span className="text-xs font-medium uppercase tracking-widest text-[#ffcc18]">How it works</span>
+        <span className="text-xs font-medium uppercase tracking-widest text-gold">How it works</span>
         <h2 className="text-3xl font-bold tracking-tight text-cream-50">From clip to score in minutes</h2>
       </div>
 
@@ -62,7 +63,7 @@ export function FeatureSection() {
         ))}
       </div>
 
-      <div className="flex justify-center pt-4">
+      <div className="flex justify-center">
         <Link
           href="/studio"
           className="rounded-xl bg-[#ffcc18] px-6 py-3 text-sm font-semibold text-navy-950 transition-all hover:bg-[#ffd84d] active:scale-[0.99]"

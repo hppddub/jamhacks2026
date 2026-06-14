@@ -23,14 +23,14 @@ export function SiteHeader() {
 
   return (
     <header className="sticky top-0 z-20 border-b border-navy-800 bg-navy-950/80 backdrop-blur-sm">
-      <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <div className="relative mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
         <Link href="/" className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/banana-logo.svg" alt="BananaMOV logo" className="h-8 w-8" />
           <span className="text-lg font-bold tracking-tight text-cream-50">BananaMOV</span>
         </Link>
 
-        <nav className="flex items-center gap-1">
+        <nav className="absolute left-1/2 hidden -translate-x-1/2 items-center gap-1 md:flex">
           {NAV_LINKS.map(({ href, label }) => (
             <Link
               key={href}
@@ -39,7 +39,7 @@ export function SiteHeader() {
               className={cn(
                 'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
                 isActive(href)
-                  ? 'text-[#ffcc18]'
+                  ? 'text-gold'
                   : 'text-cream-300 hover:text-cream-50'
               )}
             >

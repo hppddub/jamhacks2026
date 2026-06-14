@@ -52,15 +52,15 @@ const VARIANT_STYLE: Record<ToastVariant, { bar: string; icon: React.ReactNode }
   success: {
     bar: 'bg-[#6EA556]',
     icon: (
-      <svg className="h-4 w-4 text-[#6EA556]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <svg className="h-4 w-4 text-leaf" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
       </svg>
     ),
   },
   error: {
-    bar: 'bg-red-500',
+    bar: 'bg-[#ee4444]',
     icon: (
-      <svg className="h-4 w-4 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <svg className="h-4 w-4 text-[#ee4444]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
       </svg>
     ),
@@ -68,7 +68,7 @@ const VARIANT_STYLE: Record<ToastVariant, { bar: string; icon: React.ReactNode }
   info: {
     bar: 'bg-[#7CA0CB]',
     icon: (
-      <svg className="h-4 w-4 text-[#7CA0CB]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+      <svg className="h-4 w-4 text-slate" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
     ),

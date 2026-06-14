@@ -32,7 +32,7 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
   ].filter(Boolean) as string[];
 
   return (
-    <div className="flex flex-col rounded-xl border border-navy-700 bg-navy-900 p-5 transition-colors hover:border-navy-600">
+    <div className="bento-card flex flex-col rounded-xl border border-navy-700 bg-navy-900 p-5 hover:border-navy-600">
       {editing ? (
         <input
           autoFocus
@@ -53,7 +53,7 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
       ) : (
         <Link
           href={`/projects/${project.id}`}
-          className="truncate text-base font-semibold text-cream-50 hover:text-[#ffcc18]"
+          className="truncate text-base font-semibold text-cream-50 hover:text-gold"
         >
           {project.name}
         </Link>
@@ -79,7 +79,7 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
       </p>
 
       <div className="mt-4 flex items-center gap-3 border-t border-navy-800 pt-3 text-xs">
-        <Link href={`/projects/${project.id}`} className="font-medium text-[#ffcc18] hover:underline">
+        <Link href={`/projects/${project.id}`} className="font-medium text-gold hover:underline">
           Open
         </Link>
         {!editing && (
@@ -98,7 +98,7 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
               <button
                 onClick={() => del.mutate(project.id)}
                 disabled={busy}
-                className="font-medium text-red-400 hover:text-red-300 disabled:opacity-50"
+                className="font-medium text-[#ee4444] hover:text-[#ee4444]/80 disabled:opacity-50"
               >
                 {del.isPending ? 'Deleting…' : 'Yes'}
               </button>
@@ -114,7 +114,7 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
             <button
               onClick={() => setConfirming(true)}
               disabled={busy}
-              className="text-cream-400 transition-colors hover:text-red-400 disabled:opacity-50"
+              className="text-cream-400 transition-colors hover:text-[#ee4444] disabled:opacity-50"
             >
               Delete
             </button>
@@ -123,7 +123,7 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
       </div>
 
       {(rename.isError || del.isError) && (
-        <p className="mt-2 text-xs text-red-400">
+        <p className="mt-2 text-xs text-[#ee4444]">
           {((rename.error ?? del.error) as Error).message}
         </p>
       )}

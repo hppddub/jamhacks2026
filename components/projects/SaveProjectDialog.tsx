@@ -59,7 +59,7 @@ export function SaveProjectDialog({ base, defaultName, redirectTo = 'project', o
         />
 
         {save.isError && (
-          <p className="mt-3 text-sm text-red-400">{(save.error as Error).message}</p>
+          <p className="mt-3 text-sm text-[#ee4444]">{(save.error as Error).message}</p>
         )}
 
         <div className="mt-5 flex justify-end gap-3">

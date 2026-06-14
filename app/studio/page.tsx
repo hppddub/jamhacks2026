@@ -58,10 +58,10 @@ function ErrorBanner({
   onReset: () => void;
 }) {
   return (
-    <div role="alert" className="animate-fade-in rounded-xl border border-red-300 bg-red-50 p-4 dark:border-red-800/60 dark:bg-red-950/40">
+    <div role="alert" className="animate-fade-in rounded-xl border border-[#ee4444]/30 bg-[#ee4444]/10 p-4 dark:border-[#ee4444]/40 dark:bg-[#ee4444]/10">
       <div className="flex items-start gap-3">
         <svg
-          className="mt-0.5 h-5 w-5 flex-shrink-0 text-red-600 dark:text-red-400"
+          className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#ee4444]"
           fill="none"
           viewBox="0 0 24 24"
           stroke="currentColor"
@@ -72,8 +72,8 @@ function ErrorBanner({
           <line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
         <div className="flex-1">
-          <p className="text-sm font-medium text-red-800 dark:text-red-300">Something went wrong</p>
-          <p className="mt-1 text-sm text-red-700/90 dark:text-red-400/80">{message}</p>
+          <p className="text-sm font-medium text-[#ee4444]">Something went wrong</p>
+          <p className="mt-1 text-sm text-[#ee4444]/90">{message}</p>
         </div>
       </div>
       <div className="mt-4 flex gap-3">
@@ -168,7 +168,10 @@ export default function Studio() {
     };
   }, [canDropGlobally, selectFile, toast]);
 
-  // Celebrate completion and stem readiness with a toast.
+  // Celebrate analysis, completion and stem readiness with a toast.
+  useEffect(() => {
+    if (step === 'analyzed') toast('Analysis is ready 🎬');
+  }, [step, toast]);
   useEffect(() => {
     if (step === 'completed') toast('Your score is ready 🎵');
   }, [step, toast]);
@@ -192,21 +195,10 @@ export default function Studio() {
       {isFileDragging && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/80 backdrop-blur-sm">
           <div className="m-6 flex flex-col items-center gap-4 rounded-2xl border-2 border-dashed border-[#ffcc18] bg-navy-900/60 px-12 py-16 text-center">
-            <span className="material-symbols-outlined !text-5xl text-[#ffcc18]">cloud_upload</span>
+            <span className="material-symbols-outlined !text-5xl text-gold">cloud_upload</span>
             <p className="text-lg font-semibold text-cream-50">Drop your video to upload</p>
             <p className="text-sm text-cream-300">MP4, MOV, or WEBM · up to 100 MB</p>
           </div>
-        </div>
-      )}
-
-      {/* Hero — idle only */}
-      {step === 'idle' && (
-        <div className="animate-fade-in space-y-3 pb-4 text-center">
-          <h1 className="text-4xl font-bold tracking-tight">Score your video with AI</h1>
-          <p className="mx-auto max-w-xl leading-relaxed text-cream-200">
-            Upload any video and BananaMOV will analyze its mood, energy, and visual arc —
-            then generate a custom music score perfectly matched to every scene.
-          </p>
         </div>
       )}
 
@@ -227,7 +219,7 @@ export default function Studio() {
                       done
                         ? 'bg-[#ffcc18] text-navy-950'
                         : active
-                        ? 'border-2 border-[#ffcc18] text-[#ffcc18] ring-4 ring-[#ffcc18]/20 animate-pulse'
+                        ? 'border-2 border-[#ffcc18] text-gold ring-4 ring-[#ffcc18]/20 animate-pulse'
                         : 'border border-navy-700 text-cream-400'
                     }`}
                   >
@@ -247,7 +239,7 @@ export default function Studio() {
                   </div>
                   <span
                     className={`text-sm transition-colors ${
-                      done ? 'text-[#ffcc18]' : active ? 'text-cream-50' : 'text-cream-400'
+                      done ? 'text-gold' : active ? 'text-cream-50' : 'text-cream-400'
                     }`}
                   >
                     {label}
@@ -305,8 +297,8 @@ export default function Studio() {
                   <DropZone onFileSelect={selectFile} />
                   {/* Decorative blobs — light mode only */}
                   <div className="dark:hidden absolute -z-10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[110%] h-[120%] opacity-20 pointer-events-none">
-                    <div className="absolute top-0 left-0 w-32 h-32 bg-[#745b00] rounded-full blur-3xl" />
-                    <div className="absolute bottom-0 right-0 w-48 h-48 bg-[#376a23] rounded-full blur-3xl" />
+                    <div className="absolute top-0 left-0 w-32 h-32 bg-[#6b5240] rounded-full blur-3xl" />
+                    <div className="absolute bottom-0 right-0 w-48 h-48 bg-[#6ea556] rounded-full blur-3xl" />
                   </div>
                   {/* Decorative glow — dark mode only */}
                   <div className="hidden dark:block absolute -z-10 top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-[140%] pointer-events-none">
@@ -322,14 +314,14 @@ export default function Studio() {
 
                 {/* Card 1 — Visual Arc Analysis */}
                 <div className="bento-card bg-white dark:bg-navy-900 border border-[#d2c5ab] dark:border-navy-700 p-8 rounded-2xl flex flex-col items-start h-full">
-                  <div className="w-12 h-12 bg-[#cfe1fe] dark:bg-blue-900/30 rounded-xl flex items-center justify-center mb-6">
-                    <span className="material-symbols-outlined text-[#4e6078] dark:text-blue-300">analytics</span>
+                  <div className="w-12 h-12 bg-[#7ca0cb] dark:bg-[#7ca0cb]/30 rounded-xl flex items-center justify-center mb-6">
+                    <span className="material-symbols-outlined text-[#1d2f45] dark:text-[#7ca0cb]">analytics</span>
                   </div>
                   <h4 className="font-display text-2xl font-bold text-[#4A3220] dark:text-cream-50 mb-2">Visual Arc Analysis</h4>
                   <p className="text-sm leading-relaxed text-[#6B5240] dark:text-cream-400 grow">
                     Our AI maps the emotional intensity of every frame, creating a dynamic energy profile for your entire sequence as well as key climax points.
                   </p>
-                  <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-gradient-to-br from-[#fff3e6] to-[#ffe2cc] dark:from-navy-800 dark:to-navy-950 border border-black/5 dark:border-white/5">
+                  <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-gradient-to-br from-[#f8f0e2] to-[#e4d3b2] dark:from-navy-800 dark:to-navy-950 border border-black/5 dark:border-white/5">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img alt="Energy arc analysis chart" className="w-full h-full object-cover" src="/feature-arc.svg" />
                   </div>
@@ -337,14 +329,14 @@ export default function Studio() {
 
                 {/* Card 2 — Procedural Scoring */}
                 <div className="bento-card bg-white dark:bg-navy-900 border border-[#d2c5ab] dark:border-navy-700 p-8 rounded-2xl flex flex-col items-start h-full">
-                  <div className="w-12 h-12 bg-[#a7e28b] dark:bg-green-900/30 rounded-xl flex items-center justify-center mb-6">
-                    <span className="material-symbols-outlined text-[#376a23] dark:text-green-300">memory</span>
+                  <div className="w-12 h-12 bg-[#6ea556] dark:bg-[#6ea556]/30 rounded-xl flex items-center justify-center mb-6">
+                    <span className="material-symbols-outlined text-[#1d2f45] dark:text-[#6ea556]">memory</span>
                   </div>
                   <h4 className="font-display text-2xl font-bold text-[#4A3220] dark:text-cream-50 mb-2">Procedural Scoring</h4>
                   <p className="text-sm leading-relaxed text-[#6B5240] dark:text-cream-400 grow">
                     Generate unique, copyright-free musical compositions that evolve in real-time based on the pacing and cut-points of your video.
                   </p>
-                  <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-gradient-to-br from-[#fff3e6] to-[#ffe2cc] dark:from-navy-800 dark:to-navy-950 border border-black/5 dark:border-white/5">
+                  <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-gradient-to-br from-[#f8f0e2] to-[#e4d3b2] dark:from-navy-800 dark:to-navy-950 border border-black/5 dark:border-white/5">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img alt="Procedural music equalizer" className="w-full h-full object-cover" src="/feature-score.svg" />
                   </div>
@@ -353,13 +345,13 @@ export default function Studio() {
                 {/* Card 3 — Instant Sync */}
                 <div className="bento-card bg-white dark:bg-navy-900 border border-[#d2c5ab] dark:border-navy-700 p-8 rounded-2xl flex flex-col items-start h-full">
                   <div className="w-12 h-12 bg-[#ffcc18] dark:bg-[#ffcc18]/20 rounded-xl flex items-center justify-center mb-6">
-                    <span className="material-symbols-outlined text-[#745b00] dark:text-[#ffcc18]">sync</span>
+                    <span className="material-symbols-outlined text-[#6b5240] dark:text-gold">sync</span>
                   </div>
                   <h4 className="font-display text-2xl font-bold text-[#4A3220] dark:text-cream-50 mb-2">Post Generation Editing</h4>
                   <p className="text-sm leading-relaxed text-[#6B5240] dark:text-cream-400 grow">
                     Export your synchronized project or just the generated soundtrack after editing it in our own studio to create the perfect, personalized score.
                   </p>
-                  <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-gradient-to-br from-[#fff3e6] to-[#ffe2cc] dark:from-navy-800 dark:to-navy-950 border border-black/5 dark:border-white/5">
+                  <div className="mt-8 w-full h-24 rounded-lg overflow-hidden bg-gradient-to-br from-[#f8f0e2] to-[#e4d3b2] dark:from-navy-800 dark:to-navy-950 border border-black/5 dark:border-white/5">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img alt="Audio mixing sliders" className="w-full h-full object-cover" src="/feature-edit.svg" />
                   </div>
@@ -425,7 +417,7 @@ export default function Studio() {
           <section className="animate-fade-in space-y-4">
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-navy-800" />
-              <span className="text-xs font-medium uppercase tracking-widest text-[#BD9A1F] dark:text-[#ffcc18]">
+              <span className="text-xs font-medium uppercase tracking-widest text-gold dark:text-gold">
                 Your Analysis
               </span>
               <div className="h-px flex-1 bg-navy-800" />
@@ -461,13 +453,13 @@ export default function Studio() {
           <section className="animate-fade-in space-y-6">
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-navy-800" />
-              <span className="text-xs font-medium uppercase tracking-widest text-[#BD9A1F] dark:text-[#ffcc18]">
+              <span className="text-xs font-medium uppercase tracking-widest text-gold dark:text-gold">
                 Your Score
               </span>
               <div className="h-px flex-1 bg-navy-800" />
             </div>
 
-            <div className="panel-elevate animate-score-reveal space-y-3 rounded-xl border border-navy-800 bg-navy-900 p-5">
+            <div className="bento-card animate-score-reveal space-y-3 rounded-xl border border-navy-800 bg-navy-900 p-5">
               <div className="flex flex-wrap gap-2">
                 {[
                   { label: 'Mood', value: score.mood },
@@ -528,7 +520,7 @@ export default function Studio() {
 
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-navy-800" />
-              <span className="text-xs font-medium uppercase tracking-widest text-[#BD9A1F] dark:text-[#ffcc18]">
+              <span className="text-xs font-medium uppercase tracking-widest text-gold dark:text-gold">
                 Your Stems
               </span>
               <div className="h-px flex-1 bg-navy-800" />
@@ -563,7 +555,7 @@ export default function Studio() {
                 Happy with your score?{' '}
                 <button
                   onClick={reset}
-                  className="text-[#BD9A1F] underline-offset-2 hover:underline dark:text-[#ffcc18]"
+                  className="text-gold underline-offset-2 hover:underline dark:text-gold"
                 >
                   Score another video
                 </button>

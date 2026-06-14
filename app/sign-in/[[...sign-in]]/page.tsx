@@ -12,7 +12,7 @@ export default function SignInPage() {
           <h1 className="text-xl font-semibold text-cream-50">Sign-in isn&apos;t configured yet</h1>
           <p className="mt-2 text-sm text-cream-300">
             Authentication is disabled because Clerk keys aren&apos;t set. You can still use the{' '}
-            <Link href="/studio" className="text-[#ffcc18] underline-offset-2 hover:underline">
+            <Link href="/studio" className="text-gold underline-offset-2 hover:underline">
               Studio
             </Link>{' '}
             without an account.

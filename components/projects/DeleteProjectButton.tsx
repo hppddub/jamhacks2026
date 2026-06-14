@@ -26,7 +26,7 @@ export function DeleteProjectButton({ id }: { id: string }) {
     return (
       <button
         onClick={() => setConfirming(true)}
-        className="rounded-lg border border-navy-700 bg-navy-800 px-3 py-1.5 text-sm text-cream-300 transition-colors hover:border-red-800/60 hover:text-red-400"
+        className="rounded-lg border border-navy-700 bg-navy-800 px-3 py-1.5 text-sm text-cream-300 transition-colors hover:border-[#ee4444]/40 hover:text-[#ee4444]"
       >
         Delete
       </button>
@@ -39,7 +39,7 @@ export function DeleteProjectButton({ id }: { id: string }) {
       <button
         onClick={() => del.mutate()}
         disabled={del.isPending}
-        className="rounded-lg border border-red-800/60 bg-red-950/40 px-3 py-1.5 font-medium text-red-300 transition-colors hover:bg-red-950/60 disabled:opacity-50"
+        className="rounded-lg border border-[#ee4444]/40 bg-[#ee4444]/10 px-3 py-1.5 font-medium text-[#ee4444] transition-colors hover:bg-[#ee4444]/20 disabled:opacity-50"
       >
         {del.isPending ? 'Deleting…' : 'Yes, delete'}
       </button>
@@ -50,7 +50,7 @@ export function DeleteProjectButton({ id }: { id: string }) {
       >
         Cancel
       </button>
-      {del.isError && <span className="text-red-400">{(del.error as Error).message}</span>}
+      {del.isError && <span className="text-[#ee4444]">{(del.error as Error).message}</span>}
     </span>
   );
 }
