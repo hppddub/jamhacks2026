@@ -409,6 +409,22 @@ export interface ProjectSummary {
   updatedAt: string;
 }
 
+/** A folder for organising projects (Google-Drive style, arbitrarily nestable). */
+export interface FolderSummary {
+  id: string;
+  name: string;
+  parentId: string | null; // null = root
+  projectCount: number;
+  childCount: number;
+  createdAt: string;
+}
+
+/** One hop in a folder's ancestry, used to render breadcrumbs. */
+export interface FolderCrumb {
+  id: string;
+  name: string;
+}
+
 /** Payload POSTed to /api/projects to save the current workflow as a project. */
 export interface SaveProjectPayload {
   name: string;

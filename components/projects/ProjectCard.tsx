@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRenameProject, useDeleteProject } from '@/hooks/useProjects';
 import { formatDuration } from '@/lib/utils';
+import { DND_PROJECT } from './dnd';
 import type { ProjectSummary } from '@/types';
 
 export function ProjectCard({ project }: { project: ProjectSummary }) {
@@ -32,7 +33,15 @@ export function ProjectCard({ project }: { project: ProjectSummary }) {
   ].filter(Boolean) as string[];
 
   return (
-    <div className="bento-card flex flex-col rounded-xl border border-navy-700 bg-navy-900 p-5 hover:border-navy-600">
+    <div
+      draggable={!editing}
+      onDragStart={(e) => {
+        e.dataTransfer.setData(DND_PROJECT, project.id);
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      title="Drag onto a folder to organise"
+      className="bento-card flex flex-col rounded-xl border border-navy-700 bg-navy-900 p-5 hover:border-navy-600"
+    >
       {editing ? (
         <input
           autoFocus
