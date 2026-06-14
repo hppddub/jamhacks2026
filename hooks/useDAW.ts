@@ -84,13 +84,34 @@ function hydrateProject(saved: DAWProject, seedItems: DAWLibraryItem[]): DAWProj
   };
 }
 
-/** Timeline length = end of the last clip (no artificial floor/padding). */
+/** Content length = end of the last clip (no artificial floor/padding; drives the readout). */
 function computeTotalDuration(tracks: DAWTrack[]): number {
   let max = 0;
   for (const t of tracks) {
     for (const c of t.clips) max = Math.max(max, c.startSeconds + c.durationSeconds);
   }
   return max > 0 ? Math.round(max * 100) / 100 : EMPTY_TIMELINE_SECONDS;
+}
+
+// Scrollable/seekable headroom beyond the furthest clip, so the playhead can move
+// past the last audio and you can arrange further out. Grows as content grows.
+const TIMELINE_HEADROOM_SECONDS = 60;
+
+/** Re-labels tracks (and their dedicated inserts) to their current 1-based order,
+ *  so deleting/adding a track renumbers the rest sequentially (Track 1, 2, 3…). */
+function renumberTracks(tracks: DAWTrack[], inserts: MixerInsert[]): { tracks: DAWTrack[]; inserts: MixerInsert[] } {
+  const insertRename = new Map<string, string>();
+  const renumbered = tracks.map((t, i) => {
+    const name = `Track ${i + 1}`;
+    if (t.insertId !== 'master') insertRename.set(t.insertId, name);
+    return t.name === name ? t : { ...t, name };
+  });
+  const newInserts = inserts.map(ins =>
+    insertRename.has(ins.id) && ins.name !== insertRename.get(ins.id)
+      ? { ...ins, name: insertRename.get(ins.id)! }
+      : ins
+  );
+  return { tracks: renumbered, inserts: newInserts };
 }
 
 function loadDuration(url: string): Promise<number> {
@@ -174,6 +195,7 @@ export function useDAW(initialItems: DAWLibraryItem[], savedState?: DAWProject |
   const audioCtxRef = useRef<AudioContext | null>(null);
   const buffersRef = useRef<Map<string, AudioBuffer>>(new Map());
   const stretchedBuffersRef = useRef<Map<string, AudioBuffer>>(new Map()); // keyed `url@rate`
+  const realDurationRef = useRef<Map<string, number>>(new Map()); // audioUrl → true source length
   const clipSourcesRef = useRef<Map<string, AudioBufferSourceNode[]>>(new Map());
   const trackGainsRef = useRef<Map<string, GainNode>>(new Map());
   const insertsRef = useRef<Map<string, BuiltInsert>>(new Map());
@@ -228,6 +250,41 @@ export function useDAW(initialItems: DAWLibraryItem[], savedState?: DAWProject |
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Correct every clip's source length to the REAL decoded audio duration. Clips
+  // created with an unknown duration default to DEFAULT_CLIP_DURATION; if the real
+  // audio is shorter, the clip would otherwise play silence past the end while its
+  // waveform stretches to fill (visual ≠ audio). This loads the true length once per
+  // URL and trims clips into the real audio so the waveform and playback always match.
+  useEffect(() => {
+    const urls = new Set<string>();
+    for (const t of project.tracks) for (const c of t.clips) urls.add(c.audioUrl);
+    const toLoad = [...urls].filter(u => !realDurationRef.current.has(u));
+    if (toLoad.length === 0) return;
+    let cancelled = false;
+    (async () => {
+      const pairs = await Promise.all(toLoad.map(async u => [u, await loadDuration(u)] as const));
+      if (cancelled) return;
+      for (const [u, d] of pairs) realDurationRef.current.set(u, d);
+      setProject(prev => {
+        let changed = false;
+        const tracks = prev.tracks.map(t => ({
+          ...t,
+          clips: t.clips.map(c => {
+            const real = realDurationRef.current.get(c.audioUrl);
+            if (real == null || Math.abs(c.sourceDurationSeconds - real) < 0.05) return c;
+            changed = true;
+            const offset = Math.min(c.offsetSeconds, Math.max(0, real - MIN_CLIP_SECONDS));
+            const maxDur = Math.max(MIN_CLIP_SECONDS, real - offset);
+            return { ...c, sourceDurationSeconds: real, offsetSeconds: offset, durationSeconds: Math.min(c.durationSeconds, maxDur) };
+          }),
+        }));
+        if (!changed) return prev;
+        return { ...prev, tracks, totalDurationSeconds: computeTotalDuration(tracks) };
+      });
+    })();
+    return () => { cancelled = true; };
+  }, [project.tracks]);
 
   const stopRaf = useCallback(() => {
     if (rafRef.current !== null) { cancelAnimationFrame(rafRef.current); rafRef.current = null; }
@@ -376,7 +433,9 @@ export function useDAW(initialItems: DAWLibraryItem[], savedState?: DAWProject |
   }, [stopRaf, stopAllSources]);
 
   const seek = useCallback((t: number) => {
-    const clamped = Math.max(0, Math.min(t, projectRef.current.totalDurationSeconds));
+    // Seekable range includes the scroll headroom beyond the last clip.
+    const limit = projectRef.current.totalDurationSeconds + TIMELINE_HEADROOM_SECONDS;
+    const clamped = Math.max(0, Math.min(t, limit));
     currentTimeRef.current = clamped;
     setCurrentTime(clamped);
     if (transportRef.current === 'playing') {
@@ -423,8 +482,8 @@ export function useDAW(initialItems: DAWLibraryItem[], savedState?: DAWProject |
   const addTrackFromLibrary = useCallback((item: DAWLibraryItem) => {
     setProject(prev => {
       const { track, insert } = makeTrackWithInsert(item, prev.tracks.length + 1);
-      const tracks = [...prev.tracks, track];
-      return { ...prev, tracks, inserts: [...prev.inserts, insert], totalDurationSeconds: computeTotalDuration(tracks) };
+      const r = renumberTracks([...prev.tracks, track], [...prev.inserts, insert]);
+      return { ...prev, tracks: r.tracks, inserts: r.inserts, totalDurationSeconds: computeTotalDuration(r.tracks) };
     });
   }, []);
 
@@ -440,13 +499,15 @@ export function useDAW(initialItems: DAWLibraryItem[], savedState?: DAWProject |
     trackGainsRef.current.delete(trackId);
     setProject(prev => {
       const removed = prev.tracks.find(t => t.id === trackId);
-      const tracks = prev.tracks.filter(t => t.id !== trackId);
+      const filtered = prev.tracks.filter(t => t.id !== trackId);
       // Prune the track's dedicated insert (unless it's master or still routed to by another track).
       let inserts = prev.inserts;
-      if (removed && removed.insertId !== 'master' && !tracks.some(t => t.insertId === removed.insertId)) {
+      if (removed && removed.insertId !== 'master' && !filtered.some(t => t.insertId === removed.insertId)) {
         inserts = prev.inserts.filter(i => i.id !== removed.insertId);
       }
-      return { ...prev, tracks, inserts, totalDurationSeconds: computeTotalDuration(tracks) };
+      // Renumber the remaining tracks (and their inserts) to keep names sequential.
+      const r = renumberTracks(filtered, inserts);
+      return { ...prev, tracks: r.tracks, inserts: r.inserts, totalDurationSeconds: computeTotalDuration(r.tracks) };
     });
   }, []);
 
@@ -697,8 +758,11 @@ export function useDAW(initialItems: DAWLibraryItem[], savedState?: DAWProject |
     };
   }, [stopRaf, stopAllSources]);
 
+  // Scrollable timeline = content end + headroom (grows as clips move further out).
+  const timelineDurationSeconds = project.totalDurationSeconds + TIMELINE_HEADROOM_SECONDS;
+
   return {
-    project, transport, currentTime, pxPerSecond, loadingAudio,
+    project, transport, currentTime, pxPerSecond, loadingAudio, timelineDurationSeconds,
     exportOpen, setExportOpen, mixerOpen, setMixerOpen,
     selectedInsertId, setSelectedInsertId,
     toolMode, setToolMode,
