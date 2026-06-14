@@ -150,7 +150,7 @@ function StemRow({ stem }: { stem: Stem }) {
 
 export function StemPlayer({ result }: StemPlayerProps) {
   return (
-    <div className="animate-fade-in space-y-3 rounded-xl border border-navy-700 bg-navy-900 p-6">
+    <div className="panel-elevate animate-fade-in space-y-3 rounded-xl border border-navy-700 bg-navy-900 p-6">
       <div className="mb-1 flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wider text-cream-300">Audio Stems</p>
         <p className="text-xs text-cream-500">

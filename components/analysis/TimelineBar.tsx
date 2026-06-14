@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import type { TimelineSegment } from '@/types';
 
@@ -22,6 +23,14 @@ const ENERGY_TEXT: Record<string, string> = {
 };
 
 export function TimelineBar({ segments, selectedIndex, onSegmentClick }: TimelineBarProps) {
+  const [mounted, setMounted] = useState(false);
+
+  // Trigger the grow-in animation on the next frame after mount.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => cancelAnimationFrame(id);
+  }, []);
+
   if (segments.length === 0) return null;
 
   const totalDuration = segments[segments.length - 1].endSeconds;
@@ -32,7 +41,7 @@ export function TimelineBar({ segments, selectedIndex, onSegmentClick }: Timelin
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wider text-cream-300">Video Arc</p>
         {hasScores && (
-          <p className="text-xs text-zinc-500">Click a segment for micro-analysis</p>
+          <p className="text-xs text-cream-400">Click a segment for micro-analysis</p>
         )}
       </div>
 
@@ -53,11 +62,16 @@ export function TimelineBar({ segments, selectedIndex, onSegmentClick }: Timelin
                 ENERGY_BG[seg.energyLevel],
                 i === 0 && 'rounded-l-lg',
                 i === segments.length - 1 && 'rounded-r-lg',
-                i !== segments.length - 1 && 'border-r-2 border-[#E4D3B2]',
+                i !== segments.length - 1 && 'border-r-2 border-[#E4D3B2] dark:border-[#1D2F45]',
                 isClickable ? 'cursor-pointer hover:opacity-80' : 'hover:opacity-80',
                 isSelected && 'ring-2 ring-inset ring-white/70',
               )}
-              style={{ width: `${widthPct}%` }}
+              style={{
+                width: `${widthPct}%`,
+                transform: mounted ? 'scaleX(1)' : 'scaleX(0)',
+                transformOrigin: 'left',
+                transition: `transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) ${i * 0.07}s, opacity 0.2s ease`,
+              }}
               title={`${seg.label} (${seg.startSeconds}s – ${seg.endSeconds}s)`}
             >
               {widthPct > 8 && (

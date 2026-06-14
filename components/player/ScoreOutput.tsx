@@ -34,11 +34,11 @@ export function ScoreOutput({ score, videoSrc, originalAudioUrl }: ScoreOutputPr
 
   // Without a video source the combined tab is unavailable — render audio only.
   if (!hasVideo) {
-    return <AudioPlayer src={score.audioUrl} />;
+    return <AudioPlayer src={score.audioUrl} bpm={score.bpm} />;
   }
 
   return (
-    <div className="animate-fade-in space-y-4 rounded-xl border border-navy-700 bg-navy-900 p-6">
+    <div className="panel-elevate animate-fade-in space-y-4 rounded-xl border border-navy-700 bg-navy-900 p-6">
       {/* Tab bar */}
       <div className="flex items-center gap-1 rounded-lg border border-navy-700 bg-navy-950/50 p-1">
         {([
@@ -65,7 +65,7 @@ export function ScoreOutput({ score, videoSrc, originalAudioUrl }: ScoreOutputPr
 
       {/* Active panel */}
       {tab === 'audio' ? (
-        <AudioPlayer src={score.audioUrl} />
+        <AudioPlayer src={score.audioUrl} bpm={score.bpm} />
       ) : (
         <CombinedVideoPlayer
           videoSrc={videoSrc}
@@ -87,13 +87,13 @@ export function ScoreOutput({ score, videoSrc, originalAudioUrl }: ScoreOutputPr
             aria-label="Include original video audio"
             disabled={!hasOriginalAudio}
             onClick={() => setIncludeOriginalAudio((v) => !v)}
-            className={`relative h-6 w-11 flex-shrink-0 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
+            className={`inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full px-0.5 transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${
               hasOriginalAudio && includeOriginalAudio ? 'bg-[#ffcc18]' : 'bg-navy-700'
             }`}
           >
             <span
-              className={`absolute top-0.5 h-5 w-5 rounded-full bg-navy-950 transition-transform ${
-                hasOriginalAudio && includeOriginalAudio ? 'translate-x-[22px]' : 'translate-x-0.5'
+              className={`inline-block h-5 w-5 rounded-full bg-navy-950 transition-transform ${
+                hasOriginalAudio && includeOriginalAudio ? 'translate-x-5' : 'translate-x-0'
               }`}
             />
           </button>
