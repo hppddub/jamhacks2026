@@ -26,9 +26,11 @@ jamhacks2026/
 ├── .env.example                           ← template (committed)
 ├── app/
 │   ├── layout.tsx                         ← root layout, Geist fonts, Providers, metadata
-│   ├── page.tsx                           ← ONLY page — entire workflow lives here
+│   ├── page.tsx                           ← main workflow page (upload → analyze → generate → stems)
 │   ├── providers.tsx                      ← 'use client' QueryClientProvider wrapper
 │   ├── globals.css                        ← Tailwind v4 imports, CSS vars, fadeIn keyframe
+│   ├── daw/
+│   │   └── page.tsx                       ← /daw route — BananaMOV Studio (DAW page, 'use client')
 │   └── api/
 │       ├── upload/route.ts                ← POST /api/upload
 │       ├── analyze/route.ts               ← POST /api/analyze
@@ -48,9 +50,17 @@ jamhacks2026/
 │   │   ├── CombinedVideoPlayer.tsx        ← original video synced to generated score; live mute toggle for original audio
 │   │   ├── DownloadButton.tsx
 │   │   └── StemPlayer.tsx                 ← per-stem mini player grid
+│   ├── daw/
+│   │   ├── Transport.tsx                  ← play/pause/stop, BPM input, time display, zoom, mixer toggle
+│   │   ├── TrackLibrary.tsx               ← left panel: grouped audio sources, draggable into arrangement
+│   │   ├── PluginPalette.tsx             ← left panel "Plugins" section — adds effects to the selected insert
+│   │   ├── Arrangement.tsx               ← scrollable timeline: bar/beat ruler+grid, sticky headers, snapping clips, insert routing, playhead
+│   │   ├── Mixer.tsx                      ← bottom-dock FL-style mixer: insert strips + selected insert's effect rack
+│   │   └── ExportPanel.tsx               ← collapsible export/import section (audio import, WAV mix, per-track MP3, save project JSON)
 │   └── ui/                                ← shadcn/ui generated (never edit manually)
 ├── hooks/
-│   └── useWorkflow.ts                     ← state machine + all TanStack Query mutations
+│   ├── useWorkflow.ts                     ← state machine + all TanStack Query mutations
+│   └── useDAW.ts                          ← DAW state: project, transport, Web Audio scheduling + mixer graph, export
 ├── lib/
 │   ├── providers/
 │   │   ├── types.ts                       ← VideoAnalysisProvider + MusicGenerationProvider interfaces
@@ -73,12 +83,14 @@ jamhacks2026/
 │   │       └── ReplicateProvider.ts       ← Replicate Demucs v4 stem separation (costs $)
 │   ├── audio/
 │   │   ├── generateTone.ts               ← PCM synthesis + lamejs MP3 encoding; generateStemMp3 for mock stems
+│   │   ├── dawGraph.ts                   ← DAW Web Audio: effect builders (EQ/reverb/delay/compressor/distortion), buildMixGraph(), effect param specs
 │   │   ├── ffmpegEnv.ts                  ← resolvedPath(): merges Windows HKCU PATH so winget ffmpeg is found (shared by Demucs + extractor)
 │   │   └── extractOriginalAudio.ts       ← ffmpeg: transcode a video's original audio track to browser-playable MP3 (best-effort)
 │   └── utils.ts                           ← cn, formatDuration, formatFileSize,
 │                                          ←   seededRandom, hashString, generateId, delay
 ├── types/
-│   └── index.ts                           ← ALL shared TypeScript types
+│   ├── index.ts                           ← ALL shared TypeScript types (re-exports daw.ts)
+│   └── daw.ts                             ← DAW-specific types (DAWLibraryItem, DAWClip, DAWTrack, DAWProject, DAWTransportState)
 └── public/
     ├── banana-logo.svg                     ← header logo (committed)
     ├── uploads/                            ← uploaded videos (runtime, gitignored)
@@ -1191,6 +1203,96 @@ Max section count / total-duration ceiling for a plan; whether `respect_sections
 
 ---
 
+## BananaMOV Studio (DAW) — `/daw`
+
+A full-viewport online audio workstation reachable at `/daw`. Linked from `app/page.tsx` via an "Open in BananaMOV Studio →" button that appears after `stemStep === 'stems_ready'`. Audio URLs are passed as URL query params:
+
+```
+/daw?score=/generated/uuid.mp3&original=/uploads/uuid-original.mp3&stems=drums:/stems/id/drums.mp3,bass:/stems/id/bass.mp3,...
+```
+
+### Layout
+
+Full viewport — no scrolling page. `h-screen flex-col overflow-hidden`:
+
+```
+┌─────────────────────────────────────────────────┐
+│ Page header (logo, ← Back, ElevenLabs)         │
+│ Transport (play/pause/stop/BPM/Mixer/zoom)      │
+├──────────────┬──────────────────────────────────┤
+│ TrackLibrary │ Arrangement (bar/beat grid)      │
+│ + Plugins    │                                  │
+│ (220px left) ├──────────────────────────────────┤
+│              │ ExportPanel (collapsible)        │
+├──────────────┴──────────────────────────────────┤
+│ Mixer (bottom dock, toggled — full width)       │
+└─────────────────────────────────────────────────┘
+```
+
+### State — `hooks/useDAW.ts`
+
+All DAW state lives in `useDAW(initialItems: DAWLibraryItem[])`. No TanStack Query — no server mutations in the DAW. The hook:
+
+- **Initialisation:** on mount, loads each seed library item's duration via a hidden `<Audio>` element; builds one `DAWTrack` per item with one `DAWClip` at `startSeconds=0`, routed to the `'master'` insert. Imported items (added later) only populate the library, not tracks.
+- **Audio engine + single clock:** Web Audio API (`AudioContext`). On `play()` it captures **one** `ctx.currentTime + LOOKAHEAD` (0.06 s) into `playStartCtxRef`, schedules all `AudioBufferSourceNode`s off that value, and the RAF loop derives `currentTime = ctx.currentTime - playStartCtxRef + offset`. **The playhead and the top-left readout both read this single `currentTime`**, so they stay paired and advance at true 1×. `pause()` suspends; `stop()` resets to 0; `seek()` restarts scheduling from the new offset if playing.
+- **Per-clip source tracking:** `clipSourcesRef: Map<clipId, AudioBufferSourceNode[]>`. `deleteClip()` (right-click) and `removeTrack()` immediately `.stop()` the matching nodes, so deleted audio goes silent **mid-playback** (fixes the prior "keeps playing" bug).
+- **Mixer graph:** built fresh each `play()` by `buildMixGraph()` (in `lib/audio/dawGraph.ts`). Signal path: `bufferSource → trackGain → insert.input → [effect chain] → insert.volume → insert.panner → master → destination`. Non-master inserts feed the master strip's input. `trackGain` applies track mute/solo/volume; the insert strip applies insert mute/solo/volume/pan.
+- **Live updates:** `refreshGains()` (a `useEffect` on `project.tracks`/`project.inserts`) sets every track & insert gain/pan live. Effect **param** tweaks call the built effect's `update()` closure live (no rebuild). **Structural** changes (add/remove/bypass effect, re-route a track's insert) call `restartIfPlaying()` which re-schedules in place.
+- **Exports:** `exportMix()` reuses `buildMixGraph()` inside an `OfflineAudioContext` (so effects + routing are rendered), encodes WAV via a hand-written encoder, downloads. `exportTrack()` re-downloads the source MP3. `saveProject()` downloads `DAWProject` as `.json`.
+
+### Types — `types/daw.ts`
+
+```ts
+DAWLibraryItem { id, label, group: 'score'|'stems'|'original'|'imported', audioUrl, color, durationSeconds? }
+DAWClip        { id, trackId, libraryItemId, audioUrl, label, color, startSeconds, durationSeconds }
+DAWTrack       { id, name, color, muted, solo, collapsed, volume, insertId, clips }
+EffectType     = 'eq' | 'reverb' | 'delay' | 'compressor' | 'distortion'
+Effect         { id, type, enabled, params: Record<string, number> }
+MixerInsert    { id, name, volume, pan, muted, solo, effects: Effect[] }   // id 'master' = master strip
+DAWProject     { tracks, inserts, bpm, totalDurationSeconds }
+DAWTransportState = 'stopped' | 'playing' | 'paused'
+```
+
+Re-exported from `types/index.ts`. Initial project has `Master` + 4 empty inserts (`makeInitialInserts()`); `addInsert()` appends more.
+
+### Effects — `lib/audio/dawGraph.ts`
+
+Each effect compiles to a Web Audio sub-graph via `buildEffect(ctx, effect)` returning `{ input, output, update(params) }`:
+- **eq** — three `BiquadFilter`s in series (lowshelf 320 Hz / peaking 1 kHz / highshelf 3.2 kHz), gains in dB.
+- **compressor** — `DynamicsCompressorNode` (threshold/ratio/attack/release).
+- **distortion** — `WaveShaperNode` (curve from `amount`) with wet/dry blend (`mix`).
+- **delay** — `DelayNode` + feedback `GainNode` loop, wet/dry (`time`/`feedback`/`mix`).
+- **reverb** — `ConvolverNode` with a generated noise-burst impulse (`decay`), wet/dry (`mix`).
+
+`EFFECT_DEFAULTS`, `EFFECT_LABELS`, and `EFFECT_PARAM_SPECS` (the `[key,label,min,max,step]` UI descriptors) live here too.
+
+### Components — `components/daw/`
+
+**`Transport.tsx`** — play/pause (banana circle), stop, `mm:ss / mm:ss` readout, BPM `<input>`, **Mixer toggle**, zoom in/out. Loading spinner during buffer decode.
+
+**`TrackLibrary.tsx`** — grouped audio sources: **Generated Score / Audio Tracks (stems) / Original Audio / Imported**. Stems are labelled `Drums Stem`, `Bass Stem`, `Melody Stem`, `Vocals Stem`. Each item: colored dot, label, duration, `+` add button, and `draggable` (`application/daw-item`). Root is a plain `<div>` (width/border come from the left-column wrapper in `page.tsx`).
+
+**`PluginPalette.tsx`** — left-panel **"Plugins"** section under the library. Lists the 5 effects; clicking one calls `addEffect(selectedInsertId, type)` (adds to the insert currently selected in the mixer). Shows the target insert name; "Mixer ↕" opens the dock.
+
+**`Arrangement.tsx`** — dual-axis scroll. `Ruler` shows **bar numbers** (1,2,3…) with a beat-subdivided grid driven by BPM (`secondsPerBeat = 60/bpm`, 4/bar); clicking seeks. Each clip lane paints a beat/bar grid via layered `repeating-linear-gradient`. `Clip` drags via window-level mouse events and **snaps to the nearest beat** on drop; right-click deletes. Track header (`sticky left-0`, two rows when expanded): row 1 = collapse / dot / name / × remove; row 2 = M / S / **insert routing `<select>`**. Playhead is a yellow 1px line at `currentTime * pxPerSecond + HEADER_WIDTH`.
+
+**`Mixer.tsx`** — **bottom dock** (240 px, toggled). Horizontal `InsertStrip`s (name, fx/track counts, pan slider, vertical volume fader, M/S) — clicking selects a strip. Selected strip's `EffectRack` shows its effects with per-param sliders, bypass dot, and remove. "+ Insert" adds a strip; chevron closes the dock.
+
+**`ExportPanel.tsx`** — collapsible "Export & Import" bar. **Import Audio** (`<input accept="audio/*">`) → object URL + duration → appended to the **Imported** library group via `onImportAudio`. Plus "Export Mix (WAV)", per-track MP3 buttons, "Save Project (.json)".
+
+### Navigation from main page
+
+`app/page.tsx` exports `buildDAWUrl(score, originalAudioUrl, stems)`. The "Open in BananaMOV Studio →" button appears when `stemStep === 'stems_ready'`. `app/daw/page.tsx` wraps `DAWContent` (which calls `useSearchParams`) in `<Suspense>` (Next.js 16 requirement) and holds the **library list in state** (seeded from the URL) so imports can append.
+
+### DAW Constants (in source)
+
+- `TRACK_HEIGHT = 60` px, `COLLAPSED_HEIGHT = 28` px, `RULER_HEIGHT = 30` px, `HEADER_WIDTH = 200` px
+- `LOOKAHEAD = 0.06` s (schedule-ahead that the clock subtracts back out)
+- `DEFAULT_BPM = 120`, `DEFAULT_CLIP_DURATION = 30` s, `MIN_TOTAL_DURATION = 60` s (padded +10 s beyond last clip)
+- Mixer dock height `240` px; initial inserts = Master + 4
+
+---
+
 ## What NOT to Build (Hard Boundaries)
 
 | Forbidden | Why |
@@ -1203,7 +1305,7 @@ Max section count / total-duration ceiling for a plan; whether `respect_sections
 | External audio player libraries | Custom player is implemented |
 | ~~Multi-segment audio stitching~~ | **Now implemented** for >30s videos in `ElevenLabsProvider` (sequential ≤30s fetches, raw MP3-buffer concat) — no longer forbidden |
 | Real-time generation streaming | Future feature |
-| Stem editing / DAW | Future feature |
+| DAW timeline editing (move clips, mute/solo, per-stem export) | **Implemented** — see BananaMOV Studio section |
 | Direct imports of concrete providers in routes | Always use factory |
 
 ---

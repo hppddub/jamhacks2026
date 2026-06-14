@@ -1,17 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
+import Link from 'next/link';
+import Image from 'next/image';
 import { DropZone } from '@/components/upload/DropZone';
 import { VideoPreview } from '@/components/upload/VideoPreview';
 import { AnalysisCard } from '@/components/analysis/AnalysisCard';
+import { AudioPlayer } from '@/components/player/AudioPlayer';
 import { ScoreOutput } from '@/components/player/ScoreOutput';
 import { DownloadButton } from '@/components/player/DownloadButton';
 import { StemPlayer } from '@/components/player/StemPlayer';
 import { useWorkflow } from '@/hooks/useWorkflow';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { VideoScorePlayer } from '@/components/player/VideoScorePlayer';
-import { useRef } from 'react';
-import Image from 'next/image';
+import type { GeneratedScore, StemResult } from '@/types';
+
+function buildDAWUrl(
+  score: GeneratedScore,
+  originalAudioUrl: string | null,
+  stems: StemResult | null,
+): string {
+  const p = new URLSearchParams();
+  p.set('score', score.audioUrl);
+  if (originalAudioUrl) p.set('original', originalAudioUrl);
+  if (stems) {
+    const stemsStr = stems.stems
+      .map(s => `${s.id}:${s.audioUrl}`)
+      .join(',');
+    p.set('stems', stemsStr);
+  }
+  return `/daw?${p.toString()}`;
+}
 
 function Spinner({ label }: { label: string }) {
   return (
@@ -407,6 +426,18 @@ export default function Home() {
 
             {stemStep === 'stems_ready' && stems && (
               <StemPlayer result={stems} />
+            )}
+
+            {stemStep === 'stems_ready' && stems && score && (
+              <Link
+                href={buildDAWUrl(score, originalAudioUrl, stems)}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-[#ffcc18]/40 bg-[#ffcc18]/10 py-3 text-sm font-semibold text-[#ffcc18] transition-all hover:bg-[#ffcc18]/20 active:scale-[0.99]"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
+                </svg>
+                Open in BananaMOV Studio →
+              </Link>
             )}
 
             <div className="rounded-xl border border-navy-800 bg-navy-900/50 p-4 text-center">
