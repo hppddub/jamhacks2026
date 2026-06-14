@@ -1,6 +1,6 @@
 export type {
   DAWLibraryItem, DAWLibraryGroup, DAWClip, DAWTrack, DAWProject, DAWTransportState,
-  EffectType, Effect, MixerInsert,
+  DAWToolMode, EffectType, Effect, MixerInsert,
 } from './daw';
 
 export type WorkflowStep =

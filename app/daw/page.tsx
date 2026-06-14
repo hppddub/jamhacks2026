@@ -82,7 +82,7 @@ function DAWContent() {
   const daw = useDAW(seedItems);
   const {
     project, transport, currentTime, pxPerSecond, loadingAudio,
-    exportOpen, mixerOpen, selectedInsertId,
+    exportOpen, mixerOpen, selectedInsertId, toolMode,
   } = daw;
 
   const selectedInsert = project.inserts.find(i => i.id === selectedInsertId) ?? project.inserts[0];
@@ -136,6 +136,7 @@ function DAWContent() {
         bpm={project.bpm}
         loadingAudio={loadingAudio}
         mixerOpen={mixerOpen}
+        toolMode={toolMode}
         onPlay={() => { void daw.play(); }}
         onPause={daw.pause}
         onStop={daw.stop}
@@ -143,6 +144,7 @@ function DAWContent() {
         onZoomIn={daw.zoomIn}
         onZoomOut={daw.zoomOut}
         onToggleMixer={() => daw.setMixerOpen(!mixerOpen)}
+        onSetToolMode={daw.setToolMode}
       />
 
       {/* Main area */}
@@ -163,9 +165,13 @@ function DAWContent() {
             project={project}
             currentTime={currentTime}
             pxPerSecond={pxPerSecond}
+            toolMode={toolMode}
             onSeek={daw.seek}
             onMoveClip={daw.moveClip}
             onDeleteClip={daw.deleteClip}
+            onTrimClipStart={daw.trimClipStart}
+            onTrimClipEnd={daw.trimClipEnd}
+            onSplitClip={daw.splitClip}
             onToggleMute={daw.toggleMute}
             onToggleSolo={daw.toggleSolo}
             onToggleCollapse={daw.toggleCollapse}

@@ -16,9 +16,13 @@ export interface DAWClip {
   audioUrl: string;
   label: string;
   color: string;
-  startSeconds: number;
-  durationSeconds: number;
+  startSeconds: number;          // position on the arrangement timeline
+  durationSeconds: number;       // visible/played length (trimmable)
+  offsetSeconds: number;         // in-point within the source audio (0 = source start)
+  sourceDurationSeconds: number; // full decoded length of the source (trim bound)
 }
+
+export type DAWToolMode = 'move' | 'slice';
 
 export interface DAWTrack {
   id: string;

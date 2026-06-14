@@ -86,6 +86,7 @@ jamhacks2026/
 │   │   ├── generateTone.ts               ← PCM synthesis + lamejs MP3 encoding; generateStemMp3 for mock stems
 │   │   ├── dawGraph.ts                   ← DAW Web Audio: effect builders (EQ/reverb/delay/compressor/distortion/filter-adsr), buildMixGraph(), effect param specs
 │   │   ├── timeStretch.ts                ← pitch-preserving time-stretch (soundtouchjs) for BPM-as-tempo
+│   │   ├── waveform.ts                   ← cached getPeaks(url): decode source once → peak array for in-clip waveforms
 │   │   ├── ffmpegEnv.ts                  ← resolvedPath(): merges Windows HKCU PATH so winget ffmpeg is found (shared by Demucs + extractor)
 │   │   └── extractOriginalAudio.ts       ← ffmpeg: transcode a video's original audio track to browser-playable MP3 (best-effort)
 │   └── utils.ts                           ← cn, formatDuration, formatFileSize,
@@ -1243,6 +1244,11 @@ All DAW state lives in `useDAW(initialItems: DAWLibraryItem[])`. No TanStack Que
   - **Playhead/pause race fix:** `transportRef.current` is set **imperatively** in `play()`/`pause()`/`stop()` (and the end-of-track branch), not just via a `useEffect`. Previously the first RAF tick could fire before the transport effect committed and bail (`transportRef !== 'playing'`), freezing the playhead and making pause look like a reset. Setting the ref imperatively before `startRaf()` removes the race.
 - **BPM = tempo (pitch-preserved):** `bpmToRate(bpm) = clamp(bpm/120, 0.25, 4)` (120 BPM = native speed). At play time each clip's buffer is rendered through `stretchAudioBuffer()` ([lib/audio/timeStretch.ts](lib/audio/timeStretch.ts), SoundTouch via `soundtouchjs`) to a **pitch-preserving** stretched buffer of length `clipDuration/rate`, cached by `url@rate` in `stretchedBuffersRef` (rate ≈ 1 bypasses stretching). Scheduling offsets are divided by `rate`; the RAF clock advances at `rate × wall-time` so the ruler stays in project seconds. Changing BPM while playing re-renders the buffers and `restartIfPlaying()`s. Export (`OfflineAudioContext`) stretches the same way and renders a timeline of length `total/rate`.
 - **Per-clip source tracking:** `clipSourcesRef: Map<clipId, AudioBufferSourceNode[]>`. `deleteClip()` (right-click) and `removeTrack()` immediately `.stop()` the matching nodes, so deleted audio goes silent **mid-playback** (fixes the prior "keeps playing" bug).
+- **Clip tools (trim / split):** every clip plays the source window `[offsetSeconds, offsetSeconds + durationSeconds]`; scheduling reads from `offsetSeconds` (in both `play()` and `exportMix()`, divided by `rate`). Handlers (`MIN_CLIP_SECONDS = 0.1`):
+  - `trimClipStart(clipId, newStart)` — left-edge trim: moves `startSeconds` + `offsetSeconds` together and adjusts `durationSeconds` (right edge fixed). Clamped to `offsetSeconds ≥ 0` and `durationSeconds ≥ MIN` — so you can trim inward **and drag back out only to the real source start** (never past actual audio).
+  - `trimClipEnd(clipId, newDuration)` — right-edge trim: clamps `durationSeconds` to `[MIN, sourceDurationSeconds − offsetSeconds]` (can't extend past the source end).
+  - `splitClip(clipId, atSeconds)` — slices one clip into two; the right half inherits `offsetSeconds + (at − start)` so its audio is continuous. Guards `MIN` on both sides.
+  - All three `restartIfPlaying()` so live playback reschedules. `toolMode: 'move' | 'slice'` (state) selects clip-body behaviour (drag-move vs click-to-split).
 - **Mixer graph:** built fresh each `play()` by `buildMixGraph()` (in `lib/audio/dawGraph.ts`). Signal path: `bufferSource → trackGain → insert.input → [effect chain] → insert.volume → insert.panner → master → destination`. Non-master inserts feed the master strip's input. `trackGain` applies track mute/solo/volume; the insert strip applies insert mute/solo/volume/pan.
 - **Live updates:** `refreshGains()` (a `useEffect` on `project.tracks`/`project.inserts`) sets every track & insert gain/pan live. Effect **param** tweaks call the built effect's `update()` closure live (no rebuild). **Structural** changes (add/remove/bypass effect, re-route a track's insert) call `restartIfPlaying()` which re-schedules in place.
 - **Exports:** `exportMix()` reuses `buildMixGraph()` inside an `OfflineAudioContext` (so effects + routing are rendered), encodes WAV via a hand-written encoder, downloads. `exportTrack()` re-downloads the source MP3. `saveProject()` downloads `DAWProject` as `.json`.
@@ -1251,13 +1257,15 @@ All DAW state lives in `useDAW(initialItems: DAWLibraryItem[])`. No TanStack Que
 
 ```ts
 DAWLibraryItem { id, label, group: 'score'|'stems'|'original'|'imported', audioUrl, color, durationSeconds? }
-DAWClip        { id, trackId, libraryItemId, audioUrl, label, color, startSeconds, durationSeconds }
+DAWClip        { id, trackId, libraryItemId, audioUrl, label, color, startSeconds, durationSeconds,
+                 offsetSeconds, sourceDurationSeconds }   // offset = source in-point; sourceDuration = trim bound
 DAWTrack       { id, name, color, muted, solo, collapsed, volume, insertId, clips }
-EffectType     = 'eq' | 'reverb' | 'delay' | 'compressor' | 'distortion'
+EffectType     = 'eq' | 'reverb' | 'delay' | 'compressor' | 'distortion' | 'filter-adsr'
 Effect         { id, type, enabled, params: Record<string, number> }
 MixerInsert    { id, name, volume, pan, muted, solo, effects: Effect[] }   // id 'master' = master strip
 DAWProject     { tracks, inserts, bpm, totalDurationSeconds }
 DAWTransportState = 'stopped' | 'playing' | 'paused'
+DAWToolMode    = 'move' | 'slice'
 ```
 
 Re-exported from `types/index.ts`. Initial project has `Master` + 4 empty inserts (`makeInitialInserts()`); `addInsert()` appends more.
@@ -1276,13 +1284,14 @@ Each effect compiles to a Web Audio sub-graph via `buildEffect(ctx, effect, opts
 
 ### Components — `components/daw/`
 
-**`Transport.tsx`** — play/pause (banana circle), stop, `mm:ss / mm:ss` readout, BPM `<input>`, **Mixer toggle**, zoom in/out. Loading spinner during buffer decode.
+**`Transport.tsx`** — play/pause (banana circle), stop, `mm:ss / mm:ss` readout, BPM `<input>`, **Move/Slice tool toggle**, **Mixer toggle**, zoom in/out. Loading spinner during buffer decode.
 
 **`TrackLibrary.tsx`** — grouped audio sources: **Generated Score / Audio Tracks (stems) / Original Audio / Imported**. Stems are labelled `Drums Stem`, `Bass Stem`, `Melody Stem`, `Vocals Stem`. Each item: colored dot, label, duration, `+` add button, and `draggable` (`application/daw-item`). Root is a plain `<div>` (width/border come from the left-column wrapper in `page.tsx`).
 
 **`PluginPalette.tsx`** — left-panel **"Plugins"** section under the library. Lists the 5 effects; clicking one calls `addEffect(selectedInsertId, type)` (adds to the insert currently selected in the mixer). Shows the target insert name; "Mixer ↕" opens the dock.
 
-**`Arrangement.tsx`** — dual-axis scroll. `Ruler` shows **bar numbers** (1,2,3…) with a beat-subdivided grid driven by BPM (`secondsPerBeat = 60/bpm`, 4/bar); clicking seeks. Each clip lane paints a beat/bar grid via layered `repeating-linear-gradient`. `Clip` drags via window-level mouse events and **snaps to the nearest beat** on drop; right-click deletes. Track header (`sticky left-0`, two rows when expanded): row 1 = collapse / dot / name / × remove; row 2 = M / S / **insert routing `<select>`**. Playhead is a yellow 1px line at `currentTime * pxPerSecond + HEADER_WIDTH`.
+**`Arrangement.tsx`** — dual-axis scroll. `Ruler` shows **bar numbers** (1,2,3…) with a beat-subdivided grid driven by BPM (`secondsPerBeat = 60/bpm`, 4/bar); clicking seeks. Each clip lane paints a beat/bar grid via layered `repeating-linear-gradient`. Track header (`sticky left-0`, two rows when expanded): row 1 = collapse / dot / name / × remove; row 2 = M / S / **insert routing `<select>`**. Playhead is a yellow 1px line at `currentTime * pxPerSecond + HEADER_WIDTH`.
+- **`Clip`** — body drag-moves (snaps to beat) in **move** tool; in **slice** tool a body click splits at the cursor (`onSplit`). Left/right **trim handles** (`TRIM_HANDLE_PX = 6`, `cursor-ew-resize`, appear on hover) resize the clip with a live preview committed on mouse-up (snapped to beat). Right-click deletes. A `<canvas>` (`ClipWaveform`) draws the **monochrome peak waveform** of the clip's trimmed window (`getPeaks(audioUrl)` cached; windowed by `offsetSeconds`/`durationSeconds`/`sourceDurationSeconds`), behind the label — silent ≈ flat, peaks = tall.
 
 **`Mixer.tsx`** — **bottom dock** (240 px, toggled). Horizontal `InsertStrip`s (name, fx/track counts, pan slider, vertical volume fader, M/S) — clicking selects a strip. Selected strip's `EffectRack` shows its effects with per-param sliders, bypass dot, and remove — **except `filter-adsr`**, which renders an `AdsrEffectBody` (a live ADSR-curve SVG + a row of rotary `Knob`s). "+ Insert" adds a strip; chevron closes the dock.
 
@@ -1300,6 +1309,7 @@ Each effect compiles to a Web Audio sub-graph via `buildEffect(ctx, effect, opts
 - `LOOKAHEAD = 0.06` s (schedule-ahead that the clock subtracts back out)
 - `REFERENCE_BPM = 120` (native playback speed; `bpmToRate` clamps the multiplier to `[0.25, 4]`)
 - `DEFAULT_BPM = 120`, `DEFAULT_CLIP_DURATION = 30` s, `MIN_TOTAL_DURATION = 60` s (padded +10 s beyond last clip)
+- `MIN_CLIP_SECONDS = 0.1` (trim/split floor), `TRIM_HANDLE_PX = 6`, waveform peak buckets = `2000`
 - Mixer dock height `240` px; initial inserts = Master + 4
 
 ---
