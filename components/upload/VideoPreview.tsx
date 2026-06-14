@@ -1,3 +1,6 @@
+'use client';
+
+import { type RefObject } from 'react';
 import { formatFileSize } from '@/lib/utils';
 
 interface VideoPreviewProps {
@@ -5,9 +8,11 @@ interface VideoPreviewProps {
   objectUrl: string;
   onRemove: () => void;
   disabled?: boolean;
+  videoRef?: RefObject<HTMLVideoElement | null>;
+  hideControls?: boolean;
 }
 
-export function VideoPreview({ file, objectUrl, onRemove, disabled }: VideoPreviewProps) {
+export function VideoPreview({ file, objectUrl, onRemove, disabled, videoRef, hideControls }: VideoPreviewProps) {
   const filename = file.name;
   const sizeBytes = file.size;
   const displayName = filename.length > 42 ? `${filename.slice(0, 39)}…` : filename;
@@ -15,10 +20,11 @@ export function VideoPreview({ file, objectUrl, onRemove, disabled }: VideoPrevi
   return (
     <div className="animate-fade-in overflow-hidden rounded-xl border border-navy-700 bg-navy-900">
       <video
+        ref={videoRef}
         src={objectUrl}
-        controls
+        controls={!hideControls}
         preload="metadata"
-        className="w-full max-h-64 bg-black"
+        className="w-full bg-black"
       />
       <div className="flex items-center justify-between px-4 py-3">
         <div className="flex min-w-0 items-center gap-3">

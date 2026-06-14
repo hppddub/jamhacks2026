@@ -8,6 +8,7 @@ const defaultState: WorkflowState = {
   step: 'idle',
   videoFile: null,
   videoObjectUrl: null,
+  videoDurationSeconds: null,
   uploadedVideoPath: null,
   uploadedMetadata: null,
   originalAudioUrl: null,
@@ -138,8 +139,18 @@ export function useWorkflow() {
       step: 'idle',
       videoFile: file,
       videoObjectUrl: objectUrl,
+      videoDurationSeconds: null,
       error: null,
     }));
+
+    // Read duration from the video file before upload
+    const tempVideo = document.createElement('video');
+    tempVideo.preload = 'metadata';
+    tempVideo.onloadedmetadata = () => {
+      const dur = isFinite(tempVideo.duration) ? tempVideo.duration : null;
+      setState((prev) => ({ ...prev, videoDurationSeconds: dur }));
+    };
+    tempVideo.src = objectUrl;
   }, []);
 
   /** Clear the selected file and return to empty idle state. */
@@ -190,5 +201,19 @@ export function useWorkflow() {
     setState(defaultState);
   }, [state.videoObjectUrl]);
 
-  return { state, selectFile, removeFile, upload, analyze, generate, separateStems, reset };
+  /** Step back one stage, keeping captured data so the user can redo a step. */
+  const goBack = useCallback(() => {
+    setState((prev) => {
+      const back: Partial<Record<WorkflowState['step'], WorkflowState['step']>> = {
+        completed: 'analyzed',
+        analyzed: 'uploaded',
+        uploaded: 'idle',
+      };
+      const target = back[prev.step];
+      if (!target) return prev;
+      return { ...prev, step: target, error: null };
+    });
+  }, []);
+
+  return { state, selectFile, removeFile, upload, analyze, generate, separateStems, reset, goBack };
 }

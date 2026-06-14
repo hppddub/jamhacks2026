@@ -43,6 +43,19 @@ export function generateId(): string {
   return crypto.randomUUID();
 }
 
+/** Accepted upload video MIME types and the human-readable / byte limits. */
+export const ACCEPTED_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
+export const MAX_VIDEO_BYTES = 100 * 1024 * 1024; // 100 MB
+
+/** Validate a dropped/selected video file. Returns an error string, or null if valid. */
+export function validateVideoFile(file: File): string | null {
+  if (!ACCEPTED_VIDEO_TYPES.includes(file.type))
+    return 'Please upload an MP4, MOV, or WEBM video file.';
+  if (file.size > MAX_VIDEO_BYTES)
+    return `File too large (${formatFileSize(file.size)}). Maximum is 100 MB.`;
+  return null;
+}
+
 export function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

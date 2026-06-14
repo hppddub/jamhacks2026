@@ -23,6 +23,7 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-bricolage);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -120,8 +121,9 @@
   --cream-100: #EDE3D4;
   --cream-200: #D7C09B;
   --cream-300: #D7C09B;
-  --cream-400: #B28B52;
-  --cream-500: #B28B52;
+  /* Lightened from #B28B52 to meet WCAG AA (~4.9:1) for muted text on navy surfaces */
+  --cream-400: #C49C64;
+  --cream-500: #C49C64;
 
   --background: #1D2F45;
   --foreground: #FDF6EB;
@@ -166,6 +168,15 @@
   html {
     @apply font-sans;
   }
+
+  /* Accessibility: a consistent, visible keyboard focus ring on every
+     interactive element. `:where()` keeps specificity at 0 so component-level
+     focus styles can still override it. Mouse clicks don't trigger it
+     (focus-visible only). */
+  :where(a, button, input, select, textarea, [role="button"], [role="switch"], [tabindex]:not([tabindex="-1"])):focus-visible {
+    outline: 2px solid #ffcc18;
+    outline-offset: 2px;
+  }
 }
 
 /* Workflow section entrance animation */
@@ -182,4 +193,80 @@
 
 .animate-fade-in {
   animation: fadeIn 0.35s ease-out both;
+}
+
+/* Material Symbols icon font settings */
+.material-symbols-outlined {
+  font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+}
+
+/* Bento card hover animation (feature grid) */
+.bento-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+.bento-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px -5px rgba(29, 47, 69, 0.08);
+}
+
+/* Indeterminate progress bar sweep (loading states) */
+@keyframes indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(400%); }
+}
+.animate-indeterminate {
+  animation: indeterminate 1.3s ease-in-out infinite;
+}
+
+/* Timeline segment grow-in (video arc) */
+@keyframes growIn {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+
+/* Soft elevation for result panels (subtle in both themes) */
+.panel-elevate {
+  box-shadow: 0 6px 24px -12px rgba(0, 0, 0, 0.35);
+  transition: box-shadow 0.25s ease, transform 0.25s ease;
+}
+.panel-elevate:hover {
+  box-shadow: 0 12px 32px -12px rgba(0, 0, 0, 0.45);
+}
+
+/* Score reveal — celebratory scale-in for the completed step */
+@keyframes scoreReveal {
+  0%   { opacity: 0; transform: scale(0.96) translateY(10px); }
+  60%  { opacity: 1; }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+.animate-score-reveal {
+  animation: scoreReveal 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Idle delight — gentle bob for the upload icon */
+@keyframes bob {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+.animate-bob {
+  animation: bob 2.8s ease-in-out infinite;
+}
+
+/* Accessibility: honour the user's reduced-motion preference.
+   Disables entrance fades, the loading spinner, card lift, and any transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-fade-in {
+    animation: none;
+  }
+  .bento-card:hover {
+    transform: none;
+  }
 }
