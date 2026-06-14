@@ -9,10 +9,15 @@ export function getAnalysisProvider(): VideoAnalysisProvider {
 }
 
 export function getMusicProvider(): MusicGenerationProvider {
-  // Default to the Music API (layered, sectioned compositions) — best quality.
-  const provider = process.env.MUSIC_PROVIDER ?? 'elevenmusic';
-  if (provider === 'elevenmusic') return new ElevenMusicProvider();
-  if (provider === 'elevenlabs') return new ElevenLabsProvider();
-  if (provider === 'mock') return new MockMusicProvider();
+  const provider = process.env.MUSIC_PROVIDER;
+  const hasKey = !!process.env.ELEVENLABS_API_KEY;
+
+  // No key → always mock regardless of MUSIC_PROVIDER setting.
+  if (!hasKey || provider === 'mock') return new MockMusicProvider();
+
+  // MUSIC_PROVIDER=sound-generation opts in to the legacy 22s sound-effects endpoint.
+  // Everything else (elevenlabs, elevenmusic, unset) uses the Music API, which generates
+  // a single continuous track matched to the full clip length (up to 3 min, one API call).
+  if (provider === 'sound-generation') return new ElevenLabsProvider();
   return new ElevenMusicProvider();
 }

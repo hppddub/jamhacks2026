@@ -1,31 +1,20 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
-import { cn, formatFileSize } from '@/lib/utils';
+import { cn, validateVideoFile } from '@/lib/utils';
 
 interface DropZoneProps {
   onFileSelect: (file: File) => void;
 }
-
-const ACCEPTED_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'];
-const MAX_BYTES = 100 * 1024 * 1024;
 
 export function DropZone({ onFileSelect }: DropZoneProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const validate = (file: File): string | null => {
-    if (!ACCEPTED_TYPES.includes(file.type))
-      return 'Please upload an MP4, MOV, or WEBM video file.';
-    if (file.size > MAX_BYTES)
-      return `File too large (${formatFileSize(file.size)}). Maximum is 100 MB.`;
-    return null;
-  };
-
   const handleFile = useCallback(
     (file: File) => {
-      const err = validate(file);
+      const err = validateVideoFile(file);
       if (err) { setValidationError(err); return; }
       setValidationError(null);
       onFileSelect(file);
@@ -88,7 +77,7 @@ export function DropZone({ onFileSelect }: DropZoneProps) {
           <span
             className={cn(
               'material-symbols-outlined !text-4xl select-none',
-              isDragging ? 'text-[#ffcc18]' : 'text-[#6f5700] dark:text-cream-300'
+              isDragging ? 'text-[#ffcc18]' : 'text-[#6f5700] dark:text-cream-300 animate-bob'
             )}
           >
             cloud_upload
@@ -98,8 +87,8 @@ export function DropZone({ onFileSelect }: DropZoneProps) {
         <h3 className="text-2xl font-semibold text-[#1D2F45] dark:text-cream-50 mb-2">
           {isDragging ? 'Drop to upload' : 'Drop your master edit here'}
         </h3>
-        <p className="text-base text-[#7CA0CB] dark:text-cream-300 mb-8">
-          MP4, MOV, or ProRes up to 100 MB
+        <p className="text-base text-[#6B5240] dark:text-cream-300 mb-8">
+          MP4, MOV, or WEBM · up to 100 MB
         </p>
         <button
           type="button"

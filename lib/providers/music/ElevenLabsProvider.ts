@@ -6,7 +6,11 @@ import { buildPrompt, buildBackendPrompt } from './buildPrompt';
 import { generateId } from '@/lib/utils';
 
 const ELEVENLABS_API = 'https://api.elevenlabs.io/v1/sound-generation';
-const MAX_SEGMENT_SECONDS = 30;
+
+// ElevenLabs Sound Generation produces best-quality output at or below 22s.
+// Above that, the model tends to repeat or drift. For full-length continuous
+// scores, use MUSIC_PROVIDER=elevenmusic (single /v1/music request, up to 3 min).
+const MAX_DURATION_SECONDS = 22;
 
 export class ElevenLabsProvider implements MusicGenerationProvider {
   private apiKey: string;
@@ -23,20 +27,23 @@ export class ElevenLabsProvider implements MusicGenerationProvider {
 
   async generate(result: AnalysisResult): Promise<GeneratedScore> {
     const { analysis, metadata } = result;
-    const prompt = buildPrompt(result);
-    const { backendPrompt, instrumentSpec } = buildBackendPrompt(result);
 
-    console.log('[ElevenLabs] frontend prompt (%d chars):', prompt.length, prompt);
-    console.log('[ElevenLabs] backend prompt (%d chars):\n%s', backendPrompt.length, backendPrompt);
-    console.log('[ElevenLabs] instrument spec:', JSON.stringify(instrumentSpec));
+    // Narrative prompt — ElevenLabs Sound Generation works best with natural
+    // language music briefs, not technical specs.
+    const prompt = buildPrompt(result);
+    const { instrumentSpec } = buildBackendPrompt(result);
+
+    console.log('[ElevenLabs] prompt (%d chars):', prompt.length, prompt);
 
     const rawDuration = metadata.durationSeconds;
-    const totalDuration =
-      typeof rawDuration === 'number' && rawDuration >= 0.5 ? rawDuration : undefined;
+    // Cap at MAX_DURATION_SECONDS — beyond this the Sound Generation endpoint
+    // repeats content. For longer videos set MUSIC_PROVIDER=elevenmusic.
+    const durationSeconds =
+      rawDuration != null && rawDuration >= 0.5
+        ? Math.min(rawDuration, MAX_DURATION_SECONDS)
+        : undefined;
 
-    const buffer = await (totalDuration !== undefined && totalDuration > MAX_SEGMENT_SECONDS
-      ? this.fetchMultiSegment(backendPrompt, totalDuration)
-      : this.fetchSegment(backendPrompt, totalDuration));
+    const buffer = await this.fetchWithRetry(prompt, durationSeconds);
 
     const id = generateId();
     const outputDir = path.join(process.cwd(), 'public', 'generated');
@@ -45,60 +52,60 @@ export class ElevenLabsProvider implements MusicGenerationProvider {
 
     return {
       audioUrl: `/generated/${id}.mp3`,
-      durationSeconds: totalDuration ?? 20,
+      durationSeconds: durationSeconds ?? 20,
       bpm: analysis.bpm,
       genre: analysis.genre,
       mood: analysis.mood,
       filename: `score-${analysis.mood}-${analysis.bpm}bpm.mp3`,
       prompt,
-      backendPrompt,
+      backendPrompt: prompt,
       instrumentSpec,
     };
   }
 
-  // Splits a long duration into ≤30s segments, fetches them ALL IN PARALLEL,
-  // then concatenates the raw MP3 buffers in original order.
-  private async fetchMultiSegment(prompt: string, totalDuration: number): Promise<Buffer> {
-    const segCount = Math.ceil(totalDuration / MAX_SEGMENT_SECONDS);
-    const durations = Array.from({ length: segCount }, (_, i) =>
-      Math.min(totalDuration - i * MAX_SEGMENT_SECONDS, MAX_SEGMENT_SECONDS)
-    );
-
-    console.log(`[ElevenLabs] multi-segment (parallel): ${segCount} × ≤${MAX_SEGMENT_SECONDS}s for ${totalDuration}s video`);
-
-    // Promise.all preserves array order, so concat order matches the timeline.
-    const buffers = await Promise.all(durations.map((d, i) => {
-      console.log(`[ElevenLabs] segment ${i + 1}/${segCount}: ${d}s`);
-      return this.fetchSegment(prompt, d);
-    }));
-
-    return Buffer.concat(buffers);
-  }
-
-  private async fetchSegment(prompt: string, durationSeconds?: number): Promise<Buffer> {
-    const body: Record<string, unknown> = { text: prompt, prompt_influence: 0.5 };
+  private async fetchWithRetry(prompt: string, durationSeconds?: number): Promise<Buffer> {
+    const body: Record<string, unknown> = { text: prompt, prompt_influence: 0.3 };
     if (durationSeconds !== undefined) body.duration_seconds = durationSeconds;
 
-    console.log('[ElevenLabs] segment body:', JSON.stringify(body));
+    console.log('[ElevenLabs] request:', JSON.stringify(body));
 
-    const response = await fetch(ELEVENLABS_API, {
-      method: 'POST',
-      headers: {
-        'xi-api-key': this.apiKey,
-        'Content-Type': 'application/json',
-        'Accept': 'audio/mpeg',
-      },
-      body: JSON.stringify(body),
-    });
+    const MAX_RETRIES = 4;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const response = await fetch(ELEVENLABS_API, {
+        method: 'POST',
+        headers: {
+          'xi-api-key': this.apiKey,
+          'Content-Type': 'application/json',
+          Accept: 'audio/mpeg',
+        },
+        body: JSON.stringify(body),
+      });
 
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[ElevenLabs] error body:', errorText);
-      throw new Error(`ElevenLabs ${response.status}: ${errorText || '(empty response)'}`);
+      if (response.status === 429) {
+        if (attempt === MAX_RETRIES - 1) {
+          const errorText = await response.text();
+          throw new Error(`ElevenLabs 429 (rate limit): ${errorText || 'system busy'}`);
+        }
+        const retryAfterHeader = response.headers.get('Retry-After');
+        const waitMs = retryAfterHeader
+          ? Math.max(parseInt(retryAfterHeader, 10) * 1000, 1000)
+          : Math.pow(2, attempt + 3) * 1000;
+        console.warn(`[ElevenLabs] 429 — waiting ${waitMs}ms (attempt ${attempt + 1}/${MAX_RETRIES})`);
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('[ElevenLabs] error body:', errorText);
+        throw new Error(`ElevenLabs ${response.status}: ${errorText || '(empty response)'}`);
+      }
+
+      const buffer = Buffer.from(await response.arrayBuffer());
+      if (buffer.length === 0) throw new Error('ElevenLabs returned an empty audio response.');
+      return buffer;
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (buffer.length === 0) throw new Error('ElevenLabs returned an empty audio response.');
-    return buffer;
+    throw new Error('ElevenLabs: max retries exceeded (persistent rate limit).');
   }
 }

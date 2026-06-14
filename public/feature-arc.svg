@@ -1,0 +1,20 @@
+<svg viewBox="0 0 400 160" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Energy arc line chart">
+  <defs>
+    <linearGradient id="arcFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffcc18" stop-opacity="0.45"/>
+      <stop offset="100%" stop-color="#ffcc18" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
+  <g stroke="#7CA0CB" stroke-opacity="0.25" stroke-width="1">
+    <line x1="0" y1="40" x2="400" y2="40"/>
+    <line x1="0" y1="80" x2="400" y2="80"/>
+    <line x1="0" y1="120" x2="400" y2="120"/>
+  </g>
+  <path d="M0 120 C 50 110, 70 60, 110 70 C 150 80, 165 30, 205 35 C 245 40, 260 95, 300 90 C 340 85, 360 50, 400 55 L 400 160 L 0 160 Z" fill="url(#arcFill)"/>
+  <path d="M0 120 C 50 110, 70 60, 110 70 C 150 80, 165 30, 205 35 C 245 40, 260 95, 300 90 C 340 85, 360 50, 400 55" fill="none" stroke="#ffcc18" stroke-width="3" stroke-linecap="round"/>
+  <g fill="#6EA556">
+    <circle cx="110" cy="70" r="5"/>
+    <circle cx="300" cy="90" r="5"/>
+  </g>
+  <circle cx="205" cy="35" r="6" fill="#ffcc18" stroke="#1D2F45" stroke-width="2"/>
+</svg>

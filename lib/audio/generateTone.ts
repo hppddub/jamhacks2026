@@ -7,11 +7,6 @@ interface LameMp3Encoder {
   flush(): Int8Array;
 }
 
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const lamejs = require('lamejs') as {
-  Mp3Encoder: new (channels: number, sampleRate: number, kbps: number) => LameMp3Encoder;
-};
-
 const SAMPLE_RATE = 44100;
 const CHANNELS = 1;
 const BITRATE = 128;
@@ -101,12 +96,11 @@ export interface StemConfig {
   pattern: 'continuous' | 'percussive' | 'sparse';
 }
 
-export function generateStemMp3(config: StemConfig, outputPath: string): void {
+function generateStemPcm(config: StemConfig): Int16Array {
   const { frequency, amplitude, durationSeconds, bpm, pattern } = config;
   const totalSamples = Math.round(SAMPLE_RATE * durationSeconds);
   const beatSamples = Math.round((60 / bpm) * SAMPLE_RATE);
   const barSamples = beatSamples * 4;
-
   const pcm = new Int16Array(totalSamples);
 
   for (let i = 0; i < totalSamples; i++) {
@@ -116,26 +110,20 @@ export function generateStemMp3(config: StemConfig, outputPath: string): void {
     if (pattern === 'continuous') {
       const posInBar = (i % barSamples) / barSamples;
       const env = posInBar < 0.02 ? posInBar / 0.02 : posInBar > 0.9 ? (1 - posInBar) / 0.1 : 1.0;
-      // Fundamental + first harmonic for musicality
       sample = (Math.sin(2 * Math.PI * frequency * t) + Math.sin(2 * Math.PI * frequency * 2 * t) * 0.3) / 1.3 * env * amplitude;
 
     } else if (pattern === 'percussive') {
       const posInBeat = (i % beatSamples) / beatSamples;
-      // Snare-like noise burst on every beat
       const snareEnv = posInBeat < 0.005 ? 1.0 : posInBeat < 0.06 ? 1.0 - (posInBeat - 0.005) / 0.055 : 0;
       sample = (Math.random() - 0.5) * 2 * snareEnv * amplitude * 0.7;
-      // Kick thump on beats 1 and 3 of each bar
       const beatInBar = Math.floor((i % barSamples) / beatSamples);
       if (beatInBar === 0 || beatInBar === 2) {
         const kickEnv = posInBeat < 0.06 ? 1.0 - posInBeat / 0.06 : 0;
-        // Pitch-dropping sine for kick body
         sample += Math.sin(2 * Math.PI * 80 * t * Math.max(0.1, 1 - posInBeat * 8)) * kickEnv * amplitude;
       }
 
     } else {
-      // sparse: occasional quiet tone bursts — simulates near-silent vocals on instrumental
       const beatIndex = Math.floor(i / beatSamples);
-      // Deterministic per-beat activation (no Math.random so result is stable)
       const active = Math.abs(Math.sin(beatIndex * 7.3 + 1.2)) > 0.92;
       if (active) {
         const posInBeat = (i % beatSamples) / beatSamples;
@@ -146,13 +134,62 @@ export function generateStemMp3(config: StemConfig, outputPath: string): void {
 
     pcm[i] = Math.round(Math.max(-1, Math.min(1, sample)) * 32767);
   }
+  return pcm;
+}
 
-  encodePcmToMp3(pcm, outputPath);
+export function generateStemMp3(config: StemConfig, outputPath: string): void {
+  encodePcmToMp3(generateStemPcm(config), outputPath);
+}
+
+/**
+ * Writes stem PCM as a WAV file — no external library required.
+ * WAV is natively supported by all browsers. Used by MockStemProvider to avoid
+ * the lamejs IIFE-scope issue (MPEGMode is not defined) that occurs when
+ * Turbopack partially bundles CommonJS modules despite serverExternalPackages.
+ */
+export function generateStemWav(config: StemConfig, outputPath: string): void {
+  const pcm = generateStemPcm(config);
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = SAMPLE_RATE * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const dataBytes = pcm.length * 2;
+
+  const header = Buffer.allocUnsafe(44);
+  header.write('RIFF', 0, 'ascii');
+  header.writeUInt32LE(36 + dataBytes, 4);
+  header.write('WAVE', 8, 'ascii');
+  header.write('fmt ', 12, 'ascii');
+  header.writeUInt32LE(16, 16);         // fmt chunk size
+  header.writeUInt16LE(1, 20);          // PCM format
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(SAMPLE_RATE, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write('data', 36, 'ascii');
+  header.writeUInt32LE(dataBytes, 40);
+
+  const data = Buffer.allocUnsafe(dataBytes);
+  for (let i = 0; i < pcm.length; i++) {
+    data.writeInt16LE(pcm[i], i * 2);
+  }
+
+  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+  fs.writeFileSync(outputPath, Buffer.concat([header, data]));
 }
 
 // ── Shared PCM → MP3 encoder ─────────────────────────────────────────────────
 
 function encodePcmToMp3(pcm: Int16Array, outputPath: string): void {
+  // Lazy require so Turbopack does not try to bundle lamejs at module-init time.
+  // lamejs uses IIFE-scoped variables (MPEGMode etc.) that break when bundled.
+  // serverExternalPackages: ['lamejs'] in next.config.ts keeps it external in
+  // webpack builds; this lazy load is the belt-and-suspenders fix for Turbopack.
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const lamejs = require('lamejs') as {
+    Mp3Encoder: new (channels: number, sampleRate: number, kbps: number) => LameMp3Encoder;
+  };
   const encoder = new lamejs.Mp3Encoder(CHANNELS, SAMPLE_RATE, BITRATE);
   const chunks: Int8Array[] = [];
 

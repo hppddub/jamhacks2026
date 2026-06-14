@@ -9,10 +9,10 @@ interface StemPlayerProps {
 }
 
 const STEM_STYLE: Record<StemId, { color: string; label: string; waveParams: [number, number, number] }> = {
-  drums:  { color: '#f97316', label: 'Drums & Percussion', waveParams: [0.7, 1.9, 2.1] },
-  bass:   { color: '#a855f7', label: 'Bass',               waveParams: [0.3, 0.6, 0.5] },
-  melody: { color: '#ffcc18', label: 'Melody & Harmony',   waveParams: [0.9, 0.4, 1.4] },
-  vocals: { color: '#2dd4bf', label: 'Vocals',             waveParams: [0.5, 1.1, 0.8] },
+  drums:  { color: '#ef4444', label: 'Drums & Percussion', waveParams: [0.7, 1.9, 2.1] },
+  bass:   { color: '#6EA556', label: 'Bass',               waveParams: [0.3, 0.6, 0.5] },
+  melody: { color: '#FFCC18', label: 'Melody & Harmony',   waveParams: [0.9, 0.4, 1.4] },
+  vocals: { color: '#7CA0CB', label: 'Vocals',             waveParams: [0.5, 1.1, 0.8] },
 };
 
 function StemRow({ stem }: { stem: Stem }) {
@@ -138,7 +138,7 @@ function StemRow({ stem }: { stem: Stem }) {
 
         <a
           href={stem.audioUrl}
-          download={`${stem.id}.mp3`}
+          download={stem.audioUrl.split('/').pop()}
           className="flex-shrink-0 rounded-md border border-navy-700 bg-navy-800 px-2.5 py-1 text-xs text-cream-200 transition-colors hover:bg-navy-700"
         >
           ↓
@@ -150,7 +150,7 @@ function StemRow({ stem }: { stem: Stem }) {
 
 export function StemPlayer({ result }: StemPlayerProps) {
   return (
-    <div className="animate-fade-in space-y-3 rounded-xl border border-navy-700 bg-navy-900 p-6">
+    <div className="panel-elevate animate-fade-in space-y-3 rounded-xl border border-navy-700 bg-navy-900 p-6">
       <div className="mb-1 flex items-center justify-between">
         <p className="text-xs font-medium uppercase tracking-wider text-cream-300">Audio Stems</p>
         <p className="text-xs text-cream-500">

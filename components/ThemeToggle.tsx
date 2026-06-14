@@ -3,11 +3,21 @@
 import { useEffect, useState } from 'react';
 
 export function ThemeToggle() {
-  // Initialize from localStorage. Guard against SSR — Next.js renders 'use client'
-  // components on the server for the initial HTML, where localStorage doesn't exist.
-  const [isDark, setIsDark] = useState(
-    () => typeof window === 'undefined' || localStorage.getItem('theme') !== 'light'
-  );
+  // Start from the server default (dark) so the first client render matches the
+  // server HTML — reading localStorage during render would cause a hydration mismatch.
+  const [isDark, setIsDark] = useState(true);
+  const [mounted, setMounted] = useState(false);
+
+  // After mount, read the persisted choice and reconcile state + DOM class.
+  // Deferred into rAF so the state update isn't synchronous within the effect
+  // body (avoids cascading renders) and still runs post-hydration.
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      setIsDark(localStorage.getItem('theme') !== 'light');
+      setMounted(true);
+    });
+    return () => cancelAnimationFrame(id);
+  }, []);
 
   // Sync the DOM class whenever the React state changes (external system sync, no setState here)
   useEffect(() => {
@@ -30,9 +40,10 @@ export function ThemeToggle() {
     <button
       onClick={toggle}
       aria-label={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+      suppressHydrationWarning
       className="flex h-8 w-8 items-center justify-center rounded-lg border border-navy-700 bg-navy-900 text-cream-200 transition-colors hover:bg-navy-800 hover:text-cream-50"
     >
-      {isDark ? (
+      {!mounted ? null : isDark ? (
         <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <circle cx="12" cy="12" r="5" />
           <path strokeLinecap="round" d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />

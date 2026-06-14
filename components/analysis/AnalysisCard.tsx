@@ -1,13 +1,36 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { TimelineBar } from './TimelineBar';
 import { MicroScorePanel } from './MicroScorePanel';
+import { InfoTooltip } from '@/components/ui/InfoTooltip';
 import type { AnalysisResult } from '@/types';
 
 interface AnalysisCardProps {
   result: AnalysisResult;
+}
+
+/** Animates a number from 0 → target on mount (respects reduced-motion). */
+function useCountUp(target: number, duration = 900) {
+  const [value, setValue] = useState(0);
+  useEffect(() => {
+    const reduce =
+      typeof window !== 'undefined' &&
+      !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    let raf = 0;
+    const start = performance.now();
+    const tick = (now: number) => {
+      if (reduce) { setValue(target); return; }
+      const t = Math.min(1, (now - start) / duration);
+      const eased = 1 - Math.pow(1 - t, 3);
+      setValue(Math.round(target * eased));
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, duration]);
+  return value;
 }
 
 const MOOD_BADGE: Record<string, string> = {
@@ -28,11 +51,11 @@ const ENERGY_BADGE: Record<string, string> = {
 };
 
 const AUDIO_TYPE_BADGE: Record<string, string> = {
-  dialogue:         'bg-teal-500/10 text-teal-400 border-teal-500/20',
-  sound_effects:    'bg-orange-500/10 text-orange-400 border-orange-500/20',
-  background_music: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-  ambient:          'bg-green-500/10 text-green-400 border-green-500/20',
-  silence:          'bg-navy-800/50 text-cream-300 border-navy-700',
+  dialogue:         'bg-[#4A3220]/10 text-[#4A3220] border-[#4A3220]/20',
+  sound_effects:    'bg-[#C39C0F]/10 text-[#C39C0F] border-[#C39C0F]/20',
+  background_music: 'bg-[#7CA0CB]/10 text-[#7CA0CB] border-[#7CA0CB]/20',
+  ambient:          'bg-[#6EA556]/10 text-[#6EA556] border-[#6EA556]/20',
+  silence:          'bg-[#1D2F45]/50 text-cream-300 border-[#1D2F45]',
 };
 
 function Badge({ label, className }: { label: string; className?: string }) {
@@ -51,6 +74,7 @@ function Badge({ label, className }: { label: string; className?: string }) {
 export function AnalysisCard({ result }: AnalysisCardProps) {
   const analysis = result.analysis;
   const motionPct = Math.round(analysis.motionScore * 100);
+  const bpmDisplay = useCountUp(analysis.bpm);
   const [selectedSegment, setSelectedSegment] = useState<number | null>(null);
 
   const handleSegmentClick = (i: number) => {
@@ -58,7 +82,7 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
   };
 
   return (
-    <div className="animate-fade-in space-y-5 rounded-xl border border-navy-700 bg-navy-900 p-6">
+    <div className="panel-elevate animate-fade-in space-y-5 rounded-xl border border-navy-700 bg-navy-900 p-6">
       {/* Header row */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -68,8 +92,11 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
           <h3 className="text-lg font-semibold text-cream-50">Video Profile</h3>
         </div>
         <div className="text-right">
-          <p className="text-4xl font-bold tabular-nums text-[#ffcc18]">{analysis.bpm}</p>
-          <p className="mt-0.5 text-xs text-cream-300">BPM</p>
+          <p className="text-4xl font-bold tabular-nums text-[#ffcc18]">{bpmDisplay}</p>
+          <p className="mt-0.5 text-xs text-cream-300">
+            BPM
+            <InfoTooltip label="Beats per minute — the suggested tempo of the score, derived from the video's energy and pacing." />
+          </p>
         </div>
       </div>
 
@@ -96,11 +123,17 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
       {/* Stats */}
       <div className="grid grid-cols-2 gap-3">
         <div className="rounded-lg bg-navy-800/50 px-4 py-3">
-          <p className="mb-1 text-xs text-cream-300">Est. Scene Cuts</p>
+          <p className="mb-1 text-xs text-cream-300">
+            Est. Scene Cuts
+            <InfoTooltip label="Approximate number of distinct shots or cuts detected across the video." />
+          </p>
           <p className="text-xl font-semibold tabular-nums text-cream-50">{analysis.sceneCount}</p>
         </div>
         <div className="rounded-lg bg-navy-800/50 px-4 py-3">
-          <p className="mb-2 text-xs text-cream-300">Motion Score</p>
+          <p className="mb-2 text-xs text-cream-300">
+            Motion Score
+            <InfoTooltip label="How much visual movement and camera activity is in the video, from calm (0%) to highly dynamic (100%)." />
+          </p>
           <div className="flex items-center gap-2">
             <div className="h-1.5 flex-1 rounded-full bg-navy-700">
               <div
@@ -143,40 +176,36 @@ export function AnalysisCard({ result }: AnalysisCardProps) {
           <p className="mb-2 text-xs font-medium uppercase tracking-wider text-cream-300">
             Audio Profile
           </p>
-          {analysis.audioContentTypes && analysis.audioContentTypes.length > 0 && (
-            <div className="mb-2 flex flex-wrap gap-1.5">
-              {analysis.audioContentTypes.map((type) => (
-                <Badge
-                  key={type}
-                  label={type.replace('_', ' ')}
-                  className={AUDIO_TYPE_BADGE[type] ?? 'border-navy-700 bg-navy-800 text-cream-100'}
-                />
-              ))}
-            </div>
-          )}
           <div className="mb-2 flex flex-wrap gap-1.5">
+            {analysis.audioContentTypes?.map((type) => (
+              <Badge
+                key={type}
+                label={type.replace('_', ' ')}
+                className={AUDIO_TYPE_BADGE[type] ?? 'border-navy-700 bg-navy-800 text-cream-100'}
+              />
+            ))}
             {analysis.soundTexture && (
               <Badge
                 label={`${analysis.soundTexture} texture`}
-                className="border-orange-500/20 bg-orange-500/10 text-orange-400"
+                className="border-[#C39C0F]/20 bg-[#C39C0F]/10 text-[#C39C0F]"
               />
             )}
             {analysis.volumeDynamics && (
               <Badge
                 label={`${analysis.volumeDynamics} volume`}
-                className="border-purple-500/20 bg-purple-500/10 text-purple-400"
+                className="border-[#7CA0CB]/20 bg-[#7CA0CB]/10 text-[#7CA0CB]"
               />
             )}
             {analysis.dialogueTone && (
               <Badge
                 label={`${analysis.dialogueTone} tone`}
-                className="border-teal-500/20 bg-teal-500/10 text-teal-400"
+                className="border-[#4A3220]/20 bg-[#4A3220]/10 text-[#4A3220]"
               />
             )}
             {analysis.dialogueSentiment && (
               <Badge
                 label={`${analysis.dialogueSentiment} sentiment`}
-                className="border-sky-500/20 bg-sky-500/10 text-sky-400"
+                className="border-[#6EA556]/20 bg-[#6EA556]/10 text-[#6EA556]"
               />
             )}
           </div>

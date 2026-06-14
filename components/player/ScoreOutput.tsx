@@ -34,11 +34,11 @@ export function ScoreOutput({ score, videoSrc, originalAudioUrl }: ScoreOutputPr
 
   // Without a video source the combined tab is unavailable — render audio only.
   if (!hasVideo) {
-    return <AudioPlayer src={score.audioUrl} />;
+    return <AudioPlayer src={score.audioUrl} bpm={score.bpm} />;
   }
 
   return (
-    <div className="animate-fade-in space-y-4 rounded-xl border border-navy-700 bg-navy-900 p-6">
+    <div className="panel-elevate animate-fade-in space-y-4 rounded-xl border border-navy-700 bg-navy-900 p-6">
       {/* Tab bar */}
       <div className="flex items-center gap-1 rounded-lg border border-navy-700 bg-navy-950/50 p-1">
         {([
@@ -65,7 +65,7 @@ export function ScoreOutput({ score, videoSrc, originalAudioUrl }: ScoreOutputPr
 
       {/* Active panel */}
       {tab === 'audio' ? (
-        <AudioPlayer src={score.audioUrl} />
+        <AudioPlayer src={score.audioUrl} bpm={score.bpm} />
       ) : (
         <CombinedVideoPlayer
           videoSrc={videoSrc}
