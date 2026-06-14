@@ -14,8 +14,11 @@ import type {
 
 const DEFAULT_BPM = 120;
 const DEFAULT_CLIP_DURATION = 30;
-const MIN_TOTAL_DURATION = 60;
+const EMPTY_TIMELINE_SECONDS = 30; // placeholder width only when there are no clips
 const MIN_CLIP_SECONDS = 0.1; // smallest a clip can be trimmed/split to
+
+// Track header palette — tracks are generic numbered lanes, not instrument-specific.
+const TRACK_PALETTE = ['#7CA0CB', '#6EA556', '#B28B52', '#a855f7', '#2dd4bf', '#f97316', '#ffcc18'];
 const LOOKAHEAD = 0.06; // s — schedule slightly ahead so the clock and audio align
 const REFERENCE_BPM = 120; // BPM at which playback runs at native speed (rate 1.0)
 
@@ -34,7 +37,10 @@ function makeInitialInserts(): MixerInsert[] {
   return inserts;
 }
 
-function makeTrackFromItem(item: DAWLibraryItem): DAWTrack {
+/** Creates a generic numbered track ("Track N") seeded with the item's clip.
+ *  The track is just a lane — any library item (drums, melody, …) can later be
+ *  dropped into it; the clip keeps the item's own colour/label. */
+function makeTrackFromItem(item: DAWLibraryItem, trackNumber: number): DAWTrack {
   const trackId = generateId();
   const dur = item.durationSeconds ?? DEFAULT_CLIP_DURATION;
   const clip: DAWClip = {
@@ -51,20 +57,21 @@ function makeTrackFromItem(item: DAWLibraryItem): DAWTrack {
   };
   return {
     id: trackId,
-    name: item.label,
-    color: item.color,
+    name: `Track ${trackNumber}`,
+    color: TRACK_PALETTE[(trackNumber - 1) % TRACK_PALETTE.length],
     muted: false, solo: false, collapsed: false, volume: 1,
     insertId: 'master',
     clips: [clip],
   };
 }
 
+/** Timeline length = end of the last clip (no artificial floor/padding). */
 function computeTotalDuration(tracks: DAWTrack[]): number {
-  let max = MIN_TOTAL_DURATION;
+  let max = 0;
   for (const t of tracks) {
     for (const c of t.clips) max = Math.max(max, c.startSeconds + c.durationSeconds);
   }
-  return max + 10;
+  return max > 0 ? Math.round(max * 100) / 100 : EMPTY_TIMELINE_SECONDS;
 }
 
 function loadDuration(url: string): Promise<number> {
@@ -128,7 +135,7 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
     tracks: [],
     inserts: makeInitialInserts(),
     bpm: DEFAULT_BPM,
-    totalDurationSeconds: MIN_TOTAL_DURATION,
+    totalDurationSeconds: EMPTY_TIMELINE_SECONDS,
   }));
   const [transport, setTransport] = useState<DAWTransportState>('stopped');
   const [currentTime, setCurrentTime] = useState(0);
@@ -183,7 +190,7 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
         initialItems.map(async (item) => ({ ...item, durationSeconds: await loadDuration(item.audioUrl) }))
       );
       if (cancelled) return;
-      const tracks = withDur.map(makeTrackFromItem);
+      const tracks = withDur.map((item, i) => makeTrackFromItem(item, i + 1));
       setProject(prev => ({ ...prev, tracks, totalDurationSeconds: computeTotalDuration(tracks) }));
     })();
     return () => { cancelled = true; };
@@ -383,7 +390,7 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
 
   const addTrackFromLibrary = useCallback((item: DAWLibraryItem) => {
     setProject(prev => {
-      const tracks = [...prev.tracks, makeTrackFromItem(item)];
+      const tracks = [...prev.tracks, makeTrackFromItem(item, prev.tracks.length + 1)];
       return { ...prev, tracks, totalDurationSeconds: computeTotalDuration(tracks) };
     });
   }, []);

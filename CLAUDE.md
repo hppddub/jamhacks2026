@@ -1239,7 +1239,8 @@ Full viewport — no scrolling page. `h-screen flex-col overflow-hidden`:
 
 All DAW state lives in `useDAW(initialItems: DAWLibraryItem[])`. No TanStack Query — no server mutations in the DAW. The hook:
 
-- **Initialisation:** on mount, loads each seed library item's duration via a hidden `<Audio>` element; builds one `DAWTrack` per item with one `DAWClip` at `startSeconds=0`, routed to the `'master'` insert. Imported items (added later) only populate the library, not tracks.
+- **Initialisation:** on mount, loads each seed library item's duration via a hidden `<Audio>` element; builds one **generic numbered `DAWTrack`** per item (`name: 'Track N'`, colour from `TRACK_PALETTE`) with one `DAWClip` at `startSeconds=0`, routed to `'master'`. Tracks are plain lanes — **any library item can be dragged into any track** (drums + melody can share one); each clip keeps its own colour/label. Imported items only populate the library, not tracks.
+- **Timeline length:** `computeTotalDuration()` = the **end of the last clip** (max `startSeconds + durationSeconds`), no floor/padding; falls back to `EMPTY_TIMELINE_SECONDS = 30` when there are no clips. (Was floored at 60 s +10 s, which showed a misleading 1:10 default.)
 - **Audio engine + single clock:** Web Audio API (`AudioContext`). On `play()` it captures **one** `ctx.currentTime + LOOKAHEAD` (0.06 s) into `playStartCtxRef`, schedules all `AudioBufferSourceNode`s off that value, and the RAF loop derives `currentTime = (ctx.currentTime − playStartCtxRef) × rate + offset`. **The playhead and the top-left readout both read this single `currentTime`**, so they stay paired. `pause()` suspends; `stop()` resets to 0; `seek()` restarts scheduling from the new offset if playing.
   - **Playhead/pause race fix:** `transportRef.current` is set **imperatively** in `play()`/`pause()`/`stop()` (and the end-of-track branch), not just via a `useEffect`. Previously the first RAF tick could fire before the transport effect committed and bail (`transportRef !== 'playing'`), freezing the playhead and making pause look like a reset. Setting the ref imperatively before `startRaf()` removes the race.
 - **BPM = tempo (pitch-preserved):** `bpmToRate(bpm) = clamp(bpm/120, 0.25, 4)` (120 BPM = native speed). At play time each clip's buffer is rendered through `stretchAudioBuffer()` ([lib/audio/timeStretch.ts](lib/audio/timeStretch.ts), SoundTouch via `soundtouchjs`) to a **pitch-preserving** stretched buffer of length `clipDuration/rate`, cached by `url@rate` in `stretchedBuffersRef` (rate ≈ 1 bypasses stretching). Scheduling offsets are divided by `rate`; the RAF clock advances at `rate × wall-time` so the ruler stays in project seconds. Changing BPM while playing re-renders the buffers and `restartIfPlaying()`s. Export (`OfflineAudioContext`) stretches the same way and renders a timeline of length `total/rate`.
@@ -1308,7 +1309,8 @@ Each effect compiles to a Web Audio sub-graph via `buildEffect(ctx, effect, opts
 - `TRACK_HEIGHT = 60` px, `COLLAPSED_HEIGHT = 28` px, `RULER_HEIGHT = 30` px, `HEADER_WIDTH = 200` px
 - `LOOKAHEAD = 0.06` s (schedule-ahead that the clock subtracts back out)
 - `REFERENCE_BPM = 120` (native playback speed; `bpmToRate` clamps the multiplier to `[0.25, 4]`)
-- `DEFAULT_BPM = 120`, `DEFAULT_CLIP_DURATION = 30` s, `MIN_TOTAL_DURATION = 60` s (padded +10 s beyond last clip)
+- `DEFAULT_BPM = 120`, `DEFAULT_CLIP_DURATION = 30` s, `EMPTY_TIMELINE_SECONDS = 30` s (empty-project placeholder; total otherwise = last clip end)
+- `TRACK_PALETTE` = 7 colours cycled for generic "Track N" lanes
 - `MIN_CLIP_SECONDS = 0.1` (trim/split floor), `TRIM_HANDLE_PX = 6`, waveform peak buckets = `2000`
 - Mixer dock height `240` px; initial inserts = Master + 4
 
