@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/lib/db';
 import { projects, projectFiles } from '@/lib/db/schema';
 import type { NewProjectRow, NewProjectFileRow } from '@/lib/db/schema';
@@ -22,8 +22,12 @@ export async function hardDeleteProjectRow(id: string): Promise<void> {
   await db.delete(projects).where(eq(projects.id, id));
 }
 
-/** Lightweight list for the grid, newest first, scoped to the user. */
-export async function getProjectSummaries(userId: string): Promise<ProjectSummary[]> {
+/** Lightweight list for the grid, newest first, scoped to the user and a folder
+ *  (folderId null = the root level; pass a folder id to list that folder's contents). */
+export async function getProjectSummaries(
+  userId: string,
+  folderId: string | null = null
+): Promise<ProjectSummary[]> {
   const rows = await db
     .select({
       id: projects.id,
@@ -36,9 +40,26 @@ export async function getProjectSummaries(userId: string): Promise<ProjectSummar
       updatedAt: projects.updatedAt,
     })
     .from(projects)
-    .where(eq(projects.userId, userId))
+    .where(and(
+      eq(projects.userId, userId),
+      folderId === null ? isNull(projects.folderId) : eq(projects.folderId, folderId)
+    ))
     .orderBy(desc(projects.createdAt));
   return rows.map(rowToSummary);
+}
+
+/** Move a project into a folder (null = root), ownership-checked. */
+export async function moveProjectToFolder(
+  id: string,
+  userId: string,
+  folderId: string | null
+): Promise<boolean> {
+  const updated = await db
+    .update(projects)
+    .set({ folderId, updatedAt: new Date() })
+    .where(and(eq(projects.id, id), eq(projects.userId, userId)))
+    .returning({ id: projects.id });
+  return updated.length > 0;
 }
 
 /** Full project (+ files), ownership-checked. Returns null if missing or not owned. */

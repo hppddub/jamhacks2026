@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { getProject, renameProject, deleteProjectRow } from '@/lib/projects/queries';
+import { getProject, renameProject, deleteProjectRow, moveProjectToFolder } from '@/lib/projects/queries';
+import { folderExists } from '@/lib/projects/folders';
 import { getStorageProvider } from '@/lib/storage/factory';
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -12,7 +13,21 @@ export async function PATCH(request: Request, { params }: RouteContext) {
       return NextResponse.json({ error: 'Unauthorized.' }, { status: 401 });
     }
     const { id } = await params;
-    const body = (await request.json()) as { name?: unknown };
+    const body = (await request.json()) as { name?: unknown; folderId?: unknown };
+
+    // Move into a folder when a folderId key is present (string id, or null = root).
+    if ('folderId' in body) {
+      const folderId = typeof body.folderId === 'string' ? body.folderId : null;
+      if (folderId !== null && !(await folderExists(userId, folderId))) {
+        return NextResponse.json({ error: 'Destination folder not found.' }, { status: 404 });
+      }
+      const moved = await moveProjectToFolder(id, userId, folderId);
+      if (!moved) {
+        return NextResponse.json({ error: 'Project not found.' }, { status: 404 });
+      }
+      return NextResponse.json({ ok: true });
+    }
+
     const name = typeof body.name === 'string' ? body.name.trim() : '';
 
     if (!name) {

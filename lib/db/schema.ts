@@ -1,5 +1,23 @@
-import { pgTable, uuid, text, integer, real, jsonb, timestamp, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, real, jsonb, timestamp, index, type AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { AnalysisResult, GeneratedScore } from '@/types';
+
+/**
+ * Folders for organising projects (Google-Drive style). Self-referencing via
+ * `parentId` for arbitrary nesting; deleting a folder cascade-deletes its
+ * sub-folders, while contained projects fall back to the root (folder_id → null).
+ */
+export const folders = pgTable(
+  'folders',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: text('user_id').notNull(), // Clerk user id
+    name: text('name').notNull(),
+    parentId: uuid('parent_id').references((): AnyPgColumn => folders.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index('folders_user_parent_idx').on(t.userId, t.parentId)]
+);
 
 /**
  * One row per saved generation (a "project"). The full Gemini analysis and the
@@ -12,6 +30,7 @@ export const projects = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     userId: text('user_id').notNull(), // Clerk user id
     name: text('name').notNull(), // user-assigned project name
+    folderId: uuid('folder_id').references(() => folders.id, { onDelete: 'set null' }), // null = root
     status: text('status').notNull().default('saved'),
     durationSeconds: real('duration_s'),
     bpm: integer('bpm'),
@@ -52,3 +71,5 @@ export type ProjectRow = typeof projects.$inferSelect;
 export type NewProjectRow = typeof projects.$inferInsert;
 export type ProjectFileRow = typeof projectFiles.$inferSelect;
 export type NewProjectFileRow = typeof projectFiles.$inferInsert;
+export type FolderRow = typeof folders.$inferSelect;
+export type NewFolderRow = typeof folders.$inferInsert;

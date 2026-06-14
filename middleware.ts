@@ -7,6 +7,7 @@ const isProtectedRoute = createRouteMatcher([
   '/projects(.*)',
   '/mix(.*)',
   '/api/projects(.*)',
+  '/api/folders(.*)',
 ]);
 
 // When Clerk is not configured, fall back to a no-op so the app still runs.
