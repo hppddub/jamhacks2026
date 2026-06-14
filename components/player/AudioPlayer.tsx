@@ -5,12 +5,14 @@ import { formatDuration } from '@/lib/utils';
 
 interface AudioPlayerProps {
   src: string;
+  /** Header label; defaults to "Generated Score" for the existing score-player usage. */
+  label?: string;
   videoRef?: RefObject<HTMLVideoElement | null>;
   /** Score tempo — drives the beat-synced pulse on the indicator while playing. */
   bpm?: number;
 }
 
-export function AudioPlayer({ src, videoRef, bpm }: AudioPlayerProps) {
+export function AudioPlayer({ src, label = 'Generated Score', videoRef, bpm }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -164,7 +166,7 @@ export function AudioPlayer({ src, videoRef, bpm }: AudioPlayerProps) {
           className="h-2 w-2 animate-pulse rounded-full bg-[#ffcc18]"
           style={isPlaying && bpm ? { animationDuration: `${60 / bpm}s` } : undefined}
         />
-        <p className="text-sm font-medium text-cream-100">Generated Score</p>
+        <p className="text-sm font-medium text-cream-100">{label}</p>
         {!isLoaded && (
           <span className="ml-auto text-xs text-cream-400">Loading audio…</span>
         )}

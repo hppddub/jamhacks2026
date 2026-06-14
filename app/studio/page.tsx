@@ -6,12 +6,12 @@ import { AnalysisCard } from '@/components/analysis/AnalysisCard';
 import { ScoreOutput } from '@/components/player/ScoreOutput';
 import { DownloadButton } from '@/components/player/DownloadButton';
 import { StemPlayer } from '@/components/player/StemPlayer';
+import { SaveProjectControl } from '@/components/projects/SaveProjectControl';
 import { useWorkflow } from '@/hooks/useWorkflow';
-import { ThemeToggle } from '@/components/ThemeToggle';
+import { clerkEnabled } from '@/lib/auth';
 import { useToast } from '@/components/ui/Toast';
 import { validateVideoFile } from '@/lib/utils';
 import { useEffect, useRef, useState } from 'react';
-import Image from 'next/image';
 
 function Spinner({ label, steps, hint }: { label: string; steps?: string[]; hint?: string }) {
   const [stepIndex, setStepIndex] = useState(0);
@@ -106,11 +106,14 @@ const STEP_ORDER: Record<string, number> = {
   completed: 3,
 };
 
-export default function Home() {
+export default function Studio() {
   const { state, selectFile, removeFile, upload, analyze, generate, separateStems, reset, goBack } = useWorkflow();
   const videoRef = useRef<HTMLVideoElement>(null);
   const { toast } = useToast();
-  const { step, videoFile, videoObjectUrl, originalAudioUrl, analysis, score, error, stemStep, stems, stemError } = state;
+  const {
+    step, videoFile, videoObjectUrl, originalAudioUrl, uploadedVideoPath, uploadedMetadata,
+    analysis, score, error, stemStep, stems, stemError,
+  } = state;
 
   const isUploading = step === 'uploading';
   const isAnalyzing = step === 'analyzing';
@@ -120,14 +123,6 @@ export default function Home() {
   const canGoBack = !isLoading && !stemSeparating && (step === 'uploaded' || step === 'analyzed' || step === 'completed');
 
   const currentOrder = STEP_ORDER[step] ?? -1;
-
-  const [scrolled, setScrolled] = useState(false);
-  useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 8);
-    onScroll();
-    window.addEventListener('scroll', onScroll, { passive: true });
-    return () => window.removeEventListener('scroll', onScroll);
-  }, []);
 
   // Warn before leaving while work is in flight (state is in-memory only).
   useEffect(() => {
@@ -192,7 +187,7 @@ export default function Home() {
   };
 
   return (
-    <div className="min-h-screen bg-navy-950 text-cream-50">
+    <main className="mx-auto max-w-3xl space-y-8 px-6 py-12">
       {/* Full-window drag overlay */}
       {isFileDragging && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/80 backdrop-blur-sm">
@@ -204,28 +199,16 @@ export default function Home() {
         </div>
       )}
 
-      {/* Header */}
-      <header
-        className={`sticky top-0 z-10 border-b bg-navy-950/80 backdrop-blur-sm transition-shadow ${
-          scrolled ? 'border-navy-700 shadow-lg shadow-navy-950/40' : 'border-navy-800'
-        }`}
-      >
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <Image src="/banana-logo.svg" alt="BananaMOV logo" width={32} height={32} />
-            <span className="font-display text-xl font-extrabold tracking-tight">BananaMOV</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-navy-700 bg-navy-900 px-3 py-1">
-              <div className="h-2 w-2 rounded-full bg-[#ffcc18]" />
-              <span className="text-xs font-medium text-cream-300">Powered by ElevenLabs</span>
-            </div>
-            <ThemeToggle />
-          </div>
+      {/* Hero — idle only */}
+      {step === 'idle' && (
+        <div className="animate-fade-in space-y-3 pb-4 text-center">
+          <h1 className="text-4xl font-bold tracking-tight">Score your video with AI</h1>
+          <p className="mx-auto max-w-xl leading-relaxed text-cream-200">
+            Upload any video and BananaMOV will analyze its mood, energy, and visual arc —
+            then generate a custom music score perfectly matched to every scene.
+          </p>
         </div>
-      </header>
-
-      <main className="mx-auto max-w-3xl space-y-8 px-6 py-12">
+      )}
 
         {/* Step indicator */}
         {step !== 'idle' && (
@@ -528,6 +511,21 @@ export default function Home() {
             />
             <DownloadButton score={score} />
 
+            {/* Save to project (requires Clerk + a signed-in user) */}
+            {clerkEnabled && analysis && uploadedVideoPath && uploadedMetadata && (
+              <SaveProjectControl
+                base={{
+                  analysis,
+                  score,
+                  stems,
+                  originalAudioUrl,
+                  videoPath: uploadedVideoPath,
+                  videoFilename: uploadedMetadata.filename,
+                }}
+                defaultName={`${score.mood.charAt(0).toUpperCase()}${score.mood.slice(1)} ${score.genre}`}
+              />
+            )}
+
             <div className="flex items-center gap-3">
               <div className="h-px flex-1 bg-navy-800" />
               <span className="text-xs font-medium uppercase tracking-widest text-[#BD9A1F] dark:text-[#ffcc18]">
@@ -574,13 +572,5 @@ export default function Home() {
           </section>
         )}
       </main>
-
-      <footer className="border-t border-navy-800 py-8 text-center">
-        <p className="text-xs text-cream-500">
-          Built for JamHacks 2026 &middot; Powered by{' '}
-          <span className="text-cream-400">ElevenLabs</span>
-        </p>
-      </footer>
-    </div>
   );
 }

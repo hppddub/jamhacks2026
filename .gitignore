@@ -46,4 +46,5 @@ next-env.d.ts
 /public/uploads/
 /public/generated/
 /public/stems/
+/public/projects/
 /.tmp-demucs/

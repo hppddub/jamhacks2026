@@ -357,3 +357,78 @@ export interface WorkflowState {
   stems: StemResult | null;
   stemError: string | null;
 }
+
+// ── Persistence (Phase C+) ────────────────────────────────────────────────────
+// Domain shapes for saved projects. The DB row types live in lib/db/schema.ts;
+// these are the app-facing shapes returned to the client / consumed by pages.
+
+export type ProjectFileKind = 'source_video' | 'original_audio' | 'score' | 'stem' | 'master';
+
+export interface ProjectFile {
+  id: string;
+  kind: ProjectFileKind;
+  stemId?: StemId;            // set when kind === 'stem'
+  url: string;               // durable object-storage URL
+  filename?: string;
+  sizeBytes?: number;
+  mimeType?: string;
+}
+
+export interface Project {
+  id: string;
+  userId: string;            // Clerk user id
+  name: string;              // user-assigned project name
+  status: 'saved';
+  durationSeconds?: number;
+  bpm?: number;
+  genre?: string;
+  mood?: Mood;
+  analysis: AnalysisResult;
+  score: GeneratedScore;
+  files: ProjectFile[];
+  /** Saved DAW session (a DAWProject from the mixer), or null. Typed loosely to avoid coupling. */
+  mixState?: unknown;
+  createdAt: string;         // ISO timestamp
+  updatedAt: string;         // ISO timestamp
+}
+
+/** Lightweight shape for the projects grid (no analysis/score/files payload). */
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  mood?: Mood;
+  genre?: string;
+  bpm?: number;
+  durationSeconds?: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Payload POSTed to /api/projects to save the current workflow as a project. */
+export interface SaveProjectPayload {
+  name: string;
+  analysis: AnalysisResult;
+  score: GeneratedScore;
+  stems: StemResult | null;
+  originalAudioUrl: string | null;
+  videoPath: string;         // absolute local path returned by /api/upload
+  videoFilename: string;     // original user filename (for the stored source video)
+}
+
+// ── Mixing handoff (Phase E) ─────────────────────────────────────────────────
+// The contract the future mixing/mastering stage consumes. Built from a saved
+// Project + its files; no DSP yet.
+export interface MixTrack {
+  id: string;
+  label: string;
+  kind: 'score' | 'original' | 'stem';
+  url: string;
+}
+
+export interface MixSession {
+  projectId: string;
+  bpm: number;
+  keyMode?: 'major' | 'minor' | 'modal';
+  durationSeconds: number;
+  tracks: MixTrack[];
+}

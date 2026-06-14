@@ -1,7 +1,11 @@
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono, Bricolage_Grotesque } from 'next/font/google';
+import { ClerkProvider } from '@clerk/nextjs';
 import './globals.css';
 import { Providers } from './providers';
+import { SiteHeader } from '@/components/layout/SiteHeader';
+import { SiteFooter } from '@/components/layout/SiteFooter';
+import { clerkEnabled } from '@/lib/auth';
 
 const geistSans = Geist({ variable: '--font-geist-sans', subsets: ['latin'] });
 const geistMono = Geist_Mono({ variable: '--font-geist-mono', subsets: ['latin'] });
@@ -41,6 +45,16 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const tree = (
+    <Providers>
+      <div className="flex min-h-screen flex-col bg-navy-950 text-cream-50">
+        <SiteHeader />
+        <div className="flex-1">{children}</div>
+        <SiteFooter />
+      </div>
+    </Providers>
+  );
+
   return (
     <html lang="en" className={`${geistSans.variable} ${geistMono.variable} ${bricolage.variable} dark`}>
       <head>
@@ -51,7 +65,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" />
       </head>
       <body className="min-h-screen antialiased">
-        <Providers>{children}</Providers>
+        {clerkEnabled ? (
+          <ClerkProvider afterSignOutUrl="/" appearance={{ variables: { colorPrimary: '#ffcc18' } }}>
+            {tree}
+          </ClerkProvider>
+        ) : (
+          tree
+        )}
       </body>
     </html>
   );
