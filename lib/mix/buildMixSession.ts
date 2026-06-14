@@ -4,12 +4,13 @@ import { STEM_LABELS } from '@/lib/projects/serialize';
 
 const STEM_ORDER: StemId[] = ['drums', 'bass', 'melody', 'vocals'];
 
-// Stem track colors, mirrored from StemPlayer / the DAW.
+// Stem track colors, mirrored from StemPlayer's STEM_STYLE so the mixer matches
+// the colors users see when the stems are presented in the player.
 const STEM_COLORS: Record<string, string> = {
-  drums: '#f97316',
-  bass: '#a855f7',
-  melody: '#ffcc18',
-  vocals: '#2dd4bf',
+  drums: '#ee4444',
+  bass: '#6EA556',
+  melody: '#FFCC18',
+  vocals: '#7CA0CB',
 };
 
 /**
@@ -50,7 +51,7 @@ export function buildMixSession(project: Project): MixSession {
 export function mixSessionToDAWSeed(session: MixSession): DAWLibraryItem[] {
   return session.tracks.map((t): DAWLibraryItem => {
     if (t.kind === 'stem') {
-      return { id: `stem-${t.id}`, label: t.label, group: 'stems', audioUrl: t.url, color: STEM_COLORS[t.id] ?? '#6b7280' };
+      return { id: `stem-${t.id}`, label: t.label, group: 'stems', audioUrl: t.url, color: STEM_COLORS[t.id] ?? '#7ca0cb' };
     }
     if (t.kind === 'original') {
       return { id: 'original', label: t.label, group: 'original', audioUrl: t.url, color: '#7CA0CB' };

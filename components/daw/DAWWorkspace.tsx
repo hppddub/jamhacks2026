@@ -101,7 +101,7 @@ export function DAWWorkspace({ seedItems, projectId, projectName, savedState }: 
         )}
         <div className="ml-auto flex items-center gap-3">
           {projectId && saveMaster.isError && (
-            <span className="text-xs text-red-400">{(saveMaster.error as Error).message}</span>
+            <span className="text-xs text-[#ee4444]">{(saveMaster.error as Error).message}</span>
           )}
           {projectId && (
             <button

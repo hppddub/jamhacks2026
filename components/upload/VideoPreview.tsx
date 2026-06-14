@@ -30,7 +30,7 @@ export function VideoPreview({ file, objectUrl, onRemove, disabled, videoRef, hi
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md bg-navy-800">
             <svg
-              className="h-4 w-4 text-[#ffcc18]"
+              className="h-4 w-4 text-gold"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"

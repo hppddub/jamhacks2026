@@ -26,10 +26,10 @@ interface ArrangementProps {
 
 function gridBackground(pxPerBeat: number): string {
   const pxPerBar = pxPerBeat * 4;
-  // Bar lines (brighter) painted over beat lines (subtle).
+  // Bar lines (brighter) painted over beat lines (subtle). Theme-aware via tokens.
   return [
-    `repeating-linear-gradient(to right, rgba(255,255,255,0.12) 0px, rgba(255,255,255,0.12) 1px, transparent 1px, transparent ${pxPerBar}px)`,
-    `repeating-linear-gradient(to right, rgba(255,255,255,0.05) 0px, rgba(255,255,255,0.05) 1px, transparent 1px, transparent ${pxPerBeat}px)`,
+    `repeating-linear-gradient(to right, var(--daw-line-bar) 0px, var(--daw-line-bar) 1px, transparent 1px, transparent ${pxPerBar}px)`,
+    `repeating-linear-gradient(to right, var(--daw-line-beat) 0px, var(--daw-line-beat) 1px, transparent 1px, transparent ${pxPerBeat}px)`,
   ].join(', ');
 }
 
@@ -54,13 +54,13 @@ function Ruler({ totalDuration, pxPerSecond, secondsPerBar, pxPerBeat, onSeek }:
       className="relative cursor-pointer select-none bg-navy-900"
       style={{
         width: totalWidth, height: RULER_HEIGHT,
-        backgroundImage: `repeating-linear-gradient(to right, rgba(255,255,255,0.06) 0px, rgba(255,255,255,0.06) 1px, transparent 1px, transparent ${pxPerBeat}px)`,
+        backgroundImage: `repeating-linear-gradient(to right, var(--daw-line-beat) 0px, var(--daw-line-beat) 1px, transparent 1px, transparent ${pxPerBeat}px)`,
       }}
       onClick={handleClick}
     >
       {bars.map(i => (
         <div key={i} className="absolute top-0 flex h-full flex-col justify-between" style={{ left: i * secondsPerBar * pxPerSecond }}>
-          <div className="h-2.5 w-px bg-navy-500" />
+          <div className="h-2.5 w-px bg-navy-600" />
           <span className="pl-1 text-[9px] tabular-nums text-cream-500">{i + 1}</span>
         </div>
       ))}
@@ -177,7 +177,7 @@ function TrackRow({
           <span className="flex-1 truncate text-[11px] text-cream-200" title={track.name}>{track.name}</span>
           <button
             onClick={() => onRemoveTrack(track.id)}
-            className="flex-shrink-0 text-cream-600 hover:text-red-400"
+            className="flex-shrink-0 text-cream-600 hover:text-[#ee4444]"
             title="Remove track"
           >
             <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -192,7 +192,7 @@ function TrackRow({
             <button
               onClick={() => onToggleMute(track.id)}
               className={`flex-shrink-0 rounded px-1 text-[9px] font-bold transition-colors ${
-                track.muted ? 'bg-red-700/80 text-cream-100' : 'text-cream-500 hover:text-cream-200'
+                track.muted ? 'bg-[#ee4444]/80 text-cream-100' : 'text-cream-500 hover:text-cream-200'
               }`}
               title="Mute"
             >M</button>
@@ -273,6 +273,13 @@ export function Arrangement({
   }, [pxPerSecond, secondsPerBeat, onDropItem]);
 
   const playheadLeft = currentTime * pxPerSecond + HEADER_WIDTH;
+  // Only span the ruler + track rows, not the empty space beneath them — otherwise
+  // the line shows in the bottom-left where no header column covers it. (+1 per row
+  // accounts for each TrackRow's bottom border.)
+  const playheadHeight = RULER_HEIGHT + project.tracks.reduce(
+    (h, t) => h + (t.collapsed ? COLLAPSED_HEIGHT : TRACK_HEIGHT) + 1,
+    0,
+  );
 
   return (
     <div className="relative flex-1 overflow-auto" ref={scrollRef}>
@@ -323,8 +330,10 @@ export function Arrangement({
         )}
       </div>
 
-      {/* Playhead */}
-      <div className="pointer-events-none absolute top-0 z-20 w-px bg-[#ffcc18]" style={{ left: playheadLeft, height: '100%' }} />
+      {/* Playhead — z below the sticky left header column (z-10) and ruler (z-20/30)
+          so it slides behind the "Bars" section instead of over it, but stays
+          above the clip lanes. */}
+      <div className="pointer-events-none absolute top-0 z-[5] w-px bg-[#ffcc18]" style={{ left: playheadLeft, height: playheadHeight }} />
     </div>
   );
 }

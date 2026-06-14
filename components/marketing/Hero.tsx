@@ -2,7 +2,7 @@ import Link from 'next/link';
 
 export function Hero() {
   return (
-    <section className="relative mx-auto flex min-h-[calc(100vh-9rem)] max-w-4xl flex-col items-center justify-center gap-6 px-6 text-center">
+    <section className="relative mx-auto flex min-h-[calc(100vh-9rem)] max-w-4xl flex-col items-center justify-center gap-6 px-6 pb-20 text-center">
       <div className="animate-fade-in flex items-center gap-2 rounded-full border border-navy-700 bg-navy-900 px-4 py-1.5">
         <div className="h-2 w-2 rounded-full bg-[#ffcc18]" />
         <span className="text-xs font-medium text-cream-300">AI video scoring &middot; Powered by ElevenLabs</span>
@@ -11,7 +11,7 @@ export function Hero() {
       <h1 className="animate-fade-in text-5xl font-bold leading-tight tracking-tight sm:text-6xl">
         Score your video
         <br />
-        with <span className="text-[#ffcc18]">AI</span>
+        with <span className="text-gold">AI</span>
       </h1>
 
       <p className="animate-fade-in max-w-xl text-lg leading-relaxed text-cream-200">

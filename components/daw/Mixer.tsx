@@ -42,7 +42,7 @@ function InsertStrip({
         selected ? 'bg-navy-800' : 'hover:bg-navy-900'
       } ${isMaster ? 'bg-navy-900/80' : ''}`}
     >
-      <span className={`truncate text-[10px] font-semibold ${isMaster ? 'text-[#ffcc18]' : 'text-cream-200'}`}>
+      <span className={`truncate text-[10px] font-semibold ${isMaster ? 'text-gold' : 'text-cream-200'}`}>
         {insert.name}
       </span>
       <span className="text-[8px] text-cream-500">{insert.effects.length} fx · {routedCount} trk</span>
@@ -71,7 +71,7 @@ function InsertStrip({
       <div className="flex w-full items-center justify-center gap-1">
         <button
           onClick={e => { e.stopPropagation(); onMute(); }}
-          className={`rounded px-1.5 text-[9px] font-bold ${insert.muted ? 'bg-red-700/80 text-cream-100' : 'bg-navy-800 text-cream-500 hover:text-cream-200'}`}
+          className={`rounded px-1.5 text-[9px] font-bold ${insert.muted ? 'bg-[#ee4444]/80 text-cream-100' : 'bg-navy-800 text-cream-500 hover:text-cream-200'}`}
         >M</button>
         {!isMaster && (
           <button
@@ -121,7 +121,7 @@ function EffectRack({
                 <span className="flex-1 text-[11px] font-medium text-cream-100">{EFFECT_LABELS[eff.type]}</span>
                 <button
                   onClick={() => onRemoveEffect(insert.id, eff.id)}
-                  className="text-cream-600 hover:text-red-400"
+                  className="text-cream-600 hover:text-[#ee4444]"
                   title="Remove effect"
                 >
                   <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
