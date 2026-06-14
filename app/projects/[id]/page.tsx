@@ -111,19 +111,14 @@ export default async function ProjectDetailPage({ params }: { params: Promise<{ 
         </a>
       )}
 
-      {playback.stems && (
-        <>
-          <div className="flex items-center gap-3">
-            <div className="h-px flex-1 bg-navy-800" />
-            <span className="text-xs font-medium uppercase tracking-widest text-gold dark:text-gold">
-              Your Stems
-            </span>
-            <div className="h-px flex-1 bg-navy-800" />
-          </div>
+      <div className="flex items-center gap-3">
+        <div className="h-px flex-1 bg-navy-800" />
+        <span className="text-xs font-medium uppercase tracking-widest text-gold dark:text-gold">
+          Your Stems
+        </span>
+        <div className="h-px flex-1 bg-navy-800" />
+      </div>
 
-          <StemPlayer result={playback.stems} />
-        </>
-      )}
       <ProjectStemSection projectId={project.id} initialStems={playback.stems} />
     </main>
   );
