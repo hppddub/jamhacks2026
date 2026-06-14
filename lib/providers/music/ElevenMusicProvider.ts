@@ -3,6 +3,7 @@ import path from 'path';
 import type { MusicGenerationProvider } from '../types';
 import type { AnalysisResult, GeneratedScore, ScoreSection } from '@/types';
 import { buildCompositionPlan } from './buildCompositionPlan';
+import { buildBackendPrompt } from './buildPrompt';
 import { generateId } from '@/lib/utils';
 
 const ELEVENLABS_MUSIC_API = 'https://api.elevenlabs.io/v1/music';
@@ -32,6 +33,8 @@ export class ElevenMusicProvider implements MusicGenerationProvider {
   async generate(result: AnalysisResult): Promise<GeneratedScore> {
     const { analysis } = result;
     const plan = buildCompositionPlan(result);
+    // Instrument spec drives downstream stem expectations (same source as the other providers).
+    const { instrumentSpec } = buildBackendPrompt(result);
 
     const totalMs = plan.sections.reduce((sum, s) => sum + s.duration_ms, 0);
     const durationSeconds = Math.round((totalMs / 1000) * 10) / 10;
@@ -94,6 +97,8 @@ export class ElevenMusicProvider implements MusicGenerationProvider {
       mood: analysis.mood,
       filename: `score-${analysis.mood}-${analysis.bpm}bpm.mp3`,
       prompt,
+      backendPrompt: JSON.stringify(plan),
+      instrumentSpec,
       sections,
     };
   }

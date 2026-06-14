@@ -24,18 +24,46 @@ jamhacks2026/
 ├── SPEC.md                                ← product specification
 ├── .env.local                             ← secrets (gitignored)
 ├── .env.example                           ← template (committed)
+├── middleware.ts                          ← Clerk middleware (guarded): protects /projects, /mix, /api/projects; no-op when keys absent
 ├── app/
-│   ├── layout.tsx                         ← root layout, Geist fonts, Providers, metadata
-│   ├── page.tsx                           ← ONLY page — entire workflow lives here
+│   ├── layout.tsx                         ← root layout: Geist fonts, Providers, guarded ClerkProvider, GLOBAL SHELL (SiteHeader + children + SiteFooter)
+│   ├── (marketing)/page.tsx               ← '/' marketing Home (Hero + AboutSection + FeatureSection) — server component
+│   ├── studio/page.tsx                    ← '/studio' — the upload→analyze→generate→stems workflow ('use client'); was app/page.tsx
+│   ├── sign-in/[[...sign-in]]/page.tsx    ← Clerk <SignIn/> (or "not configured" notice when keyless)
+│   ├── sign-up/[[...sign-up]]/page.tsx    ← Clerk <SignUp/> (or "not configured" notice when keyless)
+│   ├── projects/page.tsx                  ← '/projects' grid (RSC, gated) — getProjectSummaries(userId)
+│   ├── projects/[id]/page.tsx             ← '/projects/[id]' detail (RSC, gated) — getProject + buildPlayback
+│   ├── mix/[projectId]/page.tsx           ← '/mix/[projectId]' (RSC, gated) → renders the DAW seeded from the project (full-bleed)
+│   ├── daw/page.tsx                        ← '/daw' standalone DAW, URL-seeded (?score=&original=&stems=); public
 │   ├── providers.tsx                      ← 'use client' QueryClientProvider wrapper
 │   ├── globals.css                        ← Tailwind v4 imports, CSS vars, fadeIn keyframe
 │   └── api/
 │       ├── upload/route.ts                ← POST /api/upload
 │       ├── analyze/route.ts               ← POST /api/analyze
 │       ├── generate/route.ts              ← POST /api/generate
-│       └── stems/route.ts                 ← POST /api/stems (maxDuration=180)
+│       ├── stems/route.ts                 ← POST /api/stems (maxDuration=180)
+│       ├── projects/route.ts              ← POST /api/projects (save; auth-gated, maxDuration=180)
+│       ├── projects/[id]/route.ts         ← PATCH (rename) + DELETE (delete + blob cleanup), auth-gated
+│       └── projects/[id]/master/route.ts  ← POST save rendered master → blob + project_files(master) + mix_state (auth-gated)
 ├── components/
 │   ├── ThemeToggle.tsx                    ← 'use client' light/dark toggle (localStorage)
+│   ├── layout/
+│   │   ├── SiteHeader.tsx                 ← 'use client' global nav (logo + Home/Studio links + Powered-by pill + HeaderAuth + ThemeToggle)
+│   │   ├── HeaderAuth.tsx                 ← 'use client' Clerk auth control (useUser → UserButton / SignInButton); rendered only when clerkEnabled
+│   │   └── SiteFooter.tsx                 ← global footer ("Built for JamHacks 2026 · Powered by ElevenLabs")
+│   ├── marketing/
+│   │   ├── Hero.tsx                       ← landing hero (headline + CTAs to /studio + scroll-down chevron)
+│   │   ├── AboutSection.tsx              ← '#about' scroll section
+│   │   └── FeatureSection.tsx            ← feature card grid (incl. "Soon" badges for projects/mixing)
+│   ├── projects/
+│   │   ├── SaveProjectControl.tsx        ← 'use client' studio save control (clerkEnabled + useUser; modal sign-in); Save / Save & open mixing
+│   │   ├── SaveProjectDialog.tsx         ← 'use client' name modal → useSaveProject → redirect to /projects/[id] or /mix/[id]
+│   │   ├── ProjectGrid.tsx               ← projects grid + empty state (renders ProjectCard)
+│   │   ├── ProjectCard.tsx               ← 'use client' card: open link, inline rename, two-step delete
+│   │   └── DeleteProjectButton.tsx       ← 'use client' detail-page delete → back to /projects
+│   ├── daw/                              ← Web-Audio DAW (from origin/maxim); replaced the Phase E mix scaffold
+│   │   ├── DAWWorkspace.tsx              ← mountable DAW shell ({seedItems, projectId?, savedState?}) + "Save master" toolbar
+│   │   ├── Transport.tsx · Arrangement.tsx · Mixer.tsx · TrackLibrary.tsx · PluginPalette.tsx · ExportPanel.tsx
 │   ├── upload/
 │   │   ├── DropZone.tsx
 │   │   └── VideoPreview.tsx
@@ -50,7 +78,11 @@ jamhacks2026/
 │   │   └── StemPlayer.tsx                 ← per-stem mini player grid
 │   └── ui/                                ← shadcn/ui generated (never edit manually)
 ├── hooks/
-│   └── useWorkflow.ts                     ← state machine + all TanStack Query mutations
+│   ├── useWorkflow.ts                     ← state machine + all TanStack Query mutations
+│   ├── useSaveProject.ts                  ← POST /api/projects mutation (returns projectId)
+│   ├── useProjects.ts                     ← useRenameProject / useDeleteProject (→ router.refresh())
+│   ├── useSaveMaster.ts                   ← POST /api/projects/[id]/master (rendered WAV + DAW session)
+│   └── useDAW.ts                          ← DAW engine: tracks/clips/mixer/effects + Web Audio playback + offline render
 ├── lib/
 │   ├── providers/
 │   │   ├── types.ts                       ← VideoAnalysisProvider + MusicGenerationProvider interfaces
@@ -74,11 +106,30 @@ jamhacks2026/
 │   ├── audio/
 │   │   ├── generateTone.ts               ← PCM synthesis + lamejs MP3 encoding; generateStemMp3 for mock stems
 │   │   ├── ffmpegEnv.ts                  ← resolvedPath(): merges Windows HKCU PATH so winget ffmpeg is found (shared by Demucs + extractor)
-│   │   └── extractOriginalAudio.ts       ← ffmpeg: transcode a video's original audio track to browser-playable MP3 (best-effort)
+│   │   ├── extractOriginalAudio.ts       ← ffmpeg: transcode a video's original audio track to browser-playable MP3 (best-effort)
+│   │   └── dawGraph.ts                    ← DAW Web Audio graph: buildEffect/buildMixGraph + effect defaults/specs
+│   ├── db/
+│   │   ├── schema.ts                      ← Drizzle pg schema: projects + project_files (+ inferred row types)
+│   │   └── index.ts                       ← Neon HTTP drizzle client (throws if DATABASE_URL unset)
+│   ├── projects/
+│   │   ├── queries.ts                     ← ownership-scoped DB ops (insert/list/get/rename/delete)
+│   │   ├── save.ts                        ← saveProjectFromWorkflow: validate paths → upload to storage → insert rows (+ rollback)
+│   │   └── serialize.ts                   ← row↔domain mappers (rowToProject/rowToSummary) + buildPlayback + STEM_LABELS
+│   ├── mix/
+│   │   └── buildMixSession.ts             ← Project → MixSession handoff + mixSessionToDAWSeed (MixSession → DAWLibraryItem[])
+│   ├── storage/
+│   │   ├── types.ts                       ← StorageProvider interface (upload/delete)
+│   │   ├── factory.ts                     ← getStorageProvider() (STORAGE_PROVIDER: vercel-blob | local)
+│   │   ├── VercelBlobProvider.ts          ← @vercel/blob put/del (durable, default)
+│   │   └── LocalStorageProvider.ts        ← dev fallback → public/projects/{key}
+│   ├── auth.ts                            ← clerkEnabled guard (true when NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY is set)
 │   └── utils.ts                           ← cn, formatDuration, formatFileSize,
 │                                          ←   seededRandom, hashString, generateId, delay
+├── drizzle.config.ts                      ← drizzle-kit config (loads .env.local; schema→./drizzle migrations)
+├── drizzle/                               ← generated SQL migrations (committed) — 0000_late_warlock.sql
 ├── types/
-│   └── index.ts                           ← ALL shared TypeScript types
+│   ├── index.ts                           ← ALL shared TypeScript types (incl. Project/MixSession; ProjectFileKind has 'master')
+│   └── daw.ts                             ← DAW types (DAWLibraryItem/DAWProject/DAWTrack/MixerInsert/Effect…)
 └── public/
     ├── banana-logo.svg                     ← header logo (committed)
     ├── uploads/                            ← uploaded videos (runtime, gitignored)
@@ -99,7 +150,7 @@ jamhacks2026/
 - Server Components are the default. Add `'use client'` only when the component uses browser APIs, event handlers, `useState`, or `useEffect`.
 - Never use `getServerSideProps`, `getStaticProps`, or `pages/`. Those are Pages Router.
 - Route handlers return `NextResponse.json(data)` for success and `NextResponse.json({ error }, { status: N })` for errors.
-- `app/page.tsx` is `'use client'` because it calls `useWorkflow()`.
+- `app/studio/page.tsx` is `'use client'` because it calls `useWorkflow()`. (`app/(marketing)/page.tsx` is a server component.)
 
 ### TypeScript — Strict Mode
 - `strict: true` is required. No `any` unless unavoidable; use `unknown` + type guards instead.
@@ -155,6 +206,70 @@ jamhacks2026/
 - Used only in `GeminiAnalyzer.ts`. Never imported in routes or components directly.
 - Client instantiated with `new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY })`.
 - Constructor throws if `GEMINI_API_KEY` is absent.
+
+### Clerk (`@clerk/nextjs` v7) — Authentication (Phase B)
+
+Auth is **guarded** so the app builds and runs whether or not Clerk keys are set.
+
+- **`lib/auth.ts`** exports `clerkEnabled = Boolean(process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)`. `NEXT_PUBLIC_*` is inlined at build, so the same constant is valid in server and client code. Everything Clerk is gated on it.
+- **`app/layout.tsx`**: when `clerkEnabled`, wraps the shell in `<ClerkProvider afterSignOutUrl="/" appearance={{ variables: { colorPrimary: '#ffcc18' } }}>`; otherwise renders the shell bare. (Banana accent is the only Clerk theming.)
+- **`middleware.ts`**: when `clerkEnabled`, `clerkMiddleware` + `createRouteMatcher(['/projects(.*)','/mix(.*)','/api/projects(.*)'])` → `await auth.protect()` on those routes; otherwise a no-op passthrough. `config.matcher` is the **canonical Clerk matcher** (runs on all routes except `_next`/static files + always on `/api`). Protection is still scoped to the gated routes via `isProtectedRoute`; public routes run the middleware but are not protected. **Do not narrow the matcher to `/projects/:path*`** — that form misses the *bare* `/projects` path and silently leaves the page unprotected (verified: bare `/projects` then returned a plain 404 with no Clerk headers).
+- **`app/sign-in/[[...sign-in]]/page.tsx`** / **`sign-up`**: render Clerk `<SignIn/>`/`<SignUp/>` when enabled, else a themed "not configured yet" notice (so the routes never crash keyless).
+- **`components/layout/HeaderAuth.tsx`** (`'use client'`): branches on `useUser()` → `<UserButton/>` (signed in) or `<SignInButton mode="redirect">` (signed out), with a spacer while `!isLoaded`. `SiteHeader` renders `{clerkEnabled && <HeaderAuth />}`.
+- **Clerk v7 gotchas (verified against the installed package):**
+  - `<SignedIn>` / `<SignedOut>` are **server-only** control components in v7 — they are NOT exported to client bundles, so a `'use client'` header must gate via the `useUser()` hook (hence `HeaderAuth`).
+  - `<UserButton>` no longer accepts `afterSignOutUrl`; the post-sign-out redirect is set on `<ClerkProvider afterSignOutUrl="/">`.
+- **Gating policy (per PLAN.md):** the generator (`/studio`) and generation APIs are **public**; sign-in is only required to save/view projects (`/projects`) and to mix (`/mix`). Those pages arrive in Phases D & E; their paths are already protected.
+- **Keys are required to actually authenticate.** With keys blank, `clerkEnabled` is false and the auth UI stays hidden. Add `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` + `CLERK_SECRET_KEY` (from dashboard.clerk.com) to `.env.local` to turn it on — no code changes needed.
+
+### Database — Neon + Drizzle (Phase C)
+
+Persistence layer for saved projects. **No table is written yet** — Phase C is schema + client + storage only; the save/read flow lands in Phase D.
+
+- **`lib/db/schema.ts`** (`drizzle-orm/pg-core`): two tables.
+  - `projects`: `id` (uuid pk, `gen_random_uuid()`), `user_id` (Clerk id), `name`, `status` (`'saved'`), denormalized `duration_s`/`bpm`/`genre`/`mood`, `analysis` jsonb (`$type<AnalysisResult>`), `score` jsonb (`$type<GeneratedScore>`), `mix_state` jsonb (reserved for Phase E), `created_at`/`updated_at` timestamptz; index on `(user_id, created_at)`.
+  - `project_files`: `id`, `project_id` (fk → projects, **on delete cascade**), `kind` (`source_video`|`original_audio`|`score`|`stem`), `stem_id` (nullable), `url` (object-storage URL), `filename`/`size_bytes`/`mime_type`, `created_at`; index on `project_id`.
+  - Exports inferred row types: `ProjectRow`/`NewProjectRow`/`ProjectFileRow`/`NewProjectFileRow`.
+- **`lib/db/index.ts`**: `db = drizzle(neon(DATABASE_URL), { schema })` over the Neon serverless HTTP driver. **Throws at import if `DATABASE_URL` is unset** — safe because only on-demand server code imports it (never static prerender).
+- **`drizzle.config.ts`**: dialect `postgresql`, schema `./lib/db/schema.ts`, out `./drizzle`; loads `.env.local` via `dotenv` (drizzle-kit runs outside Next).
+- **Scripts:** `npm run db:generate` (schema → SQL, **no DB needed**), `db:migrate` (apply to Neon — needs `DATABASE_URL`), `db:studio`.
+- **Migrations live in `drizzle/` and are committed.** Current: `0000_late_warlock.sql`. Re-run `db:generate` after any schema change, then `db:migrate`.
+- App-facing domain types (`Project`, `ProjectFile`, `ProjectFileKind`) live in `types/index.ts` — distinct from the DB row types (ISO-string dates, `files: ProjectFile[]`).
+
+### File storage — object storage behind a provider (Phase C)
+
+Same factory pattern as the analysis/music/stem providers — concrete providers imported only in `lib/storage/factory.ts`.
+
+- **`StorageProvider`** (`lib/storage/types.ts`): `upload(localPath, key, contentType) → url`, `delete(url)`.
+- **`getStorageProvider()`**: reads `STORAGE_PROVIDER` (default `'vercel-blob'`); `'local'` → `LocalStorageProvider`.
+- **`VercelBlobProvider`**: `put(key, bytes, { access:'public', contentType, addRandomSuffix:false, allowOverwrite:true })`; needs `BLOB_READ_WRITE_TOKEN` (throws on `upload` if missing).
+- **`LocalStorageProvider`** (dev): copies to `public/projects/{key}`, returns `/projects/{key}`. Not durable on serverless. `public/projects/` is gitignored.
+- **Key convention** (caller's responsibility, Phase D): `{projectId}/{kind}{-stemId?}.{ext}`.
+- **Design:** the live `/studio` workflow keeps writing to local disk (`public/uploads|generated|stems`); persistence is an **explicit promotion** of those files to durable storage at save time (Phase D) — Gemini/Demucs still need local paths, so nothing in the generation pipeline changes.
+
+### Projects — save / list / detail (Phase D)
+
+A "project" is one **saved generation**, owned by a Clerk user. Reads are React Server Components hitting Drizzle directly; writes are auth-gated route handlers.
+
+- **Save flow (`POST /api/projects` → `lib/projects/save.ts`):** `auth()` → `userId`; validates name + payload; `saveProjectFromWorkflow` resolves each artifact's **local** path (source video from the absolute upload path; original-audio/score/stems from their `/uploads|/generated|/stems` URLs — **all path-traversal-validated**), `fs.stat`s for size, uploads to `getStorageProvider()` with key `{projectId}/{kind}{-stemId?}.{ext}`, then writes the `projects` row + `project_files` rows. The stored `score.audioUrl` is **rewritten to its Blob URL** so the detail page plays it directly. neon-http has **no transactions**, so a failure after uploads best-effort-deletes the blobs and any inserted project row.
+- **Client save UI:** `useSaveProject` (TanStack mutation) → `SaveProjectControl` (rendered in the studio completed section only when `clerkEnabled`): signed-out shows `<SignInButton mode="modal">` (modal keeps the in-memory generation alive — a full-page redirect would lose it); signed-in opens `SaveProjectDialog` (name → POST → `router.push('/projects/[id]')`). Save lives in its **own hook**, not `useWorkflow`.
+- **Queries (`lib/projects/queries.ts`)** are all **ownership-scoped** (`where userId = …`): `getProjectSummaries` (grid), `getProject` (detail + files), `renameProject`, `deleteProjectRow` (cascade-deletes file rows), plus `insertProject`/`hardDeleteProjectRow` for save/rollback.
+- **Pages:** `/projects` (grid of `ProjectCard`, `getProjectSummaries`) and `/projects/[id]` (detail). The detail page **reuses `AnalysisCard`/`ScoreOutput`/`StemPlayer`/`DownloadButton` unchanged**, fed from the stored `analysis`/`score` jsonb + Blob URLs via `buildPlayback(project)` (returns `videoSrc`, `originalAudioUrl`, reconstructed `StemResult`). Both pages are `dynamic = 'force-dynamic'` and `redirect('/sign-in')` if somehow unauthenticated (middleware already gates them).
+- **Mutations:** `PATCH`/`DELETE /api/projects/[id]` (auth + ownership). `ProjectCard` does inline rename + two-step delete via `useProjects` mutations → `router.refresh()` (re-runs the RSC list). `DeleteProjectButton` (detail) navigates back to `/projects` after delete; DELETE also removes the blobs.
+- **Nav:** `SiteHeader` shows a **Projects** link when `clerkEnabled`. Post-sign-in landing is `/projects` (`.env.example`).
+- **Reuse note:** `ScoreOutput`/`CombinedVideoPlayer` already take plain string URLs, so saved Blob URLs work in `<video>`/`<audio>` with no component changes.
+
+### Mixing / Mastering — the DAW (Phase E scaffold → Phase G real DAW)
+
+A full browser **Web-Audio DAW** (imported from `origin/maxim`) replaced the Phase E `MixWorkspace` placeholder. It loads a saved project's tracks, lets you arrange/mix/master, and saves a rendered master back to the project.
+
+- **Handoff contract** `MixSession` (`types/index.ts`): `{ projectId, bpm, keyMode?, durationSeconds, tracks: MixTrack[] }`, `MixTrack = { id, label, kind: 'score'|'original'|'stem', url }`. Built by **`lib/mix/buildMixSession.ts`** (tracks ordered score → stems → original). `mixSessionToDAWSeed(session)` adapts it to the DAW's `DAWLibraryItem[]`.
+- **`/mix/[projectId]`** (RSC, gated by `'/mix(.*)'`): `auth()` → `getProject(id, userId)` (`notFound()` otherwise) → `buildMixSession` → `mixSessionToDAWSeed` → renders **`<DAWWorkspace>` full-bleed** (`h-[calc(100vh-65px)]`, i.e. viewport minus the global header — the page returns the DAW directly, not inside the `max-w-3xl` container). Verified gated live.
+- **The DAW** (`components/daw/*`, engine `hooks/useDAW.ts`, audio graph `lib/audio/dawGraph.ts`, types `types/daw.ts`): tracks/clips arrangement, per-track + insert mixer with effects (eq/reverb/delay/compressor/distortion), Web Audio playback (`AudioContext` + `AudioBufferSourceNode`), and **offline render** (`OfflineAudioContext` → WAV). `useDAW(seedItems, savedProject?)` seeds tracks from items, or **restores a saved session** from `mix_state` (validated; falls back to seeding). `fetch`+`decodeAudioData` works on cross-origin Blob URLs (Blob serves `ACAO: *`).
+- **`DAWWorkspace`** (`components/daw/DAWWorkspace.tsx`, extracted from the standalone page): props `{ seedItems, projectId?, projectName?, savedState? }`; toolbar with back-to-project + **"Save master to project"** (only when `projectId`). `app/daw/page.tsx` remains a thin **public** URL-seeded wrapper (`?score=&original=&stems=drums:…`).
+- **Export & save master:** `useDAW.renderMixBlob()` → `useSaveMaster` POSTs the WAV + DAW session JSON to **`POST /api/projects/[id]/master`** (auth+ownership) → `storage.uploadBytes(buf, '{id}/master.wav', 'audio/wav')` → replaces any existing `project_files` row `kind:'master'` (and its blob) → persists the session to `projects.mix_state` (`setProjectMixState`). `ProjectFileKind` gained `'master'` (free text, **no migration**); `Project.mixState` is plumbed via `rowToProject`. The detail page shows a **"Download mastered mix (.wav)"** link when a master exists.
+- **Storage:** `StorageProvider` gained **`uploadBytes(data, key, contentType)`** (for in-memory renders); `upload(localPath,…)` now delegates to it.
+- **Entry points:** `/projects/[id]` → **"Open Mixing →"** link; studio → **"Save & open mixing →"** (`SaveProjectDialog` `redirectTo: 'project'|'mix'`).
 
 ---
 
@@ -655,7 +770,7 @@ separateStems: () => void   // sets stemStep: 'separating', fires stemsMutation 
 - Shows "Vocals may be near-silent — this score is instrumental" note below the header
 - Stem audio stored at `public/stems/{jobId}/` (gitignored)
 
-### `app/page.tsx` stem UI (inside `step === 'completed'` section, after `<DownloadButton>`)
+### `app/studio/page.tsx` stem UI (inside `step === 'completed'` section, after `<DownloadButton>`)
 - `stemStep === 'idle'` → zinc-style secondary button "Split into Stems →"
 - `stemStep === 'separating'` → `<Spinner label="Separating audio stems…" />`
 - `stemStep === 'stems_error'` → `<ErrorBanner>` with retry calling `separateStems`
@@ -886,12 +1001,16 @@ export async function POST(request: Request) {
 
 ---
 
-## Page Layout (`app/page.tsx`)
+## Page Layout (`app/studio/page.tsx`)
+
+> **Phase A restructure:** the workflow now lives at **`/studio`** (`app/studio/page.tsx`, default export `Studio`); `/` is the marketing Home (`app/(marketing)/page.tsx`). The header and footer moved out of this page into the **global shell** rendered by `app/layout.tsx` (`<SiteHeader />` + `{children}` + `<SiteFooter />`, inside `<Providers>`). The studio page now renders only its `<main className="mx-auto max-w-3xl space-y-8 px-6 py-12">`.
 
 The page is `'use client'`. Section rendering is controlled by `state.step` and the `videoFile` presence.
 
-### Header (always visible)
-Sticky header (`bg-navy-950/80 backdrop-blur-sm`, `border-b border-navy-800`) containing: the `banana-logo.svg` + "BananaMOV" wordmark on the left, and on the right a "Powered by ElevenLabs" pill plus the `<ThemeToggle />`. A footer ("Built for JamHacks 2026 · Powered by ElevenLabs") sits below `<main>`.
+### Global shell (in `app/layout.tsx`, every page)
+- **`SiteHeader`** (`'use client'`, sticky, `bg-navy-950/80 backdrop-blur-sm`, `border-b border-navy-800`): logo + "BananaMOV" wordmark linking to `/`; nav links (Home, Studio — active link is `text-[#ffcc18]` via `usePathname`); a "Powered by ElevenLabs" pill (hidden < `sm`); and `<ThemeToggle />`. Projects/auth links are added in Phases B & D.
+- **`SiteFooter`**: "Built for JamHacks 2026 · Powered by ElevenLabs".
+- The shell wrapper is `<div className="flex min-h-screen flex-col bg-navy-950 text-cream-50">` so pages no longer set the page background themselves.
 
 ### STEP_ORDER numeric map (used to compute done/active/pending for the step indicator)
 ```ts
@@ -1060,6 +1179,15 @@ If env vars are absent, all factories default to `'mock'`. No API keys needed fo
 | `FFMPEG_CMD` | `ffmpeg` | Override the ffmpeg executable used by `extractOriginalAudio` (original-audio extraction at upload) |
 | `REPLICATE_API_KEY` | — | Required when `STEM_PROVIDER=replicate` |
 | `REPLICATE_MODEL_VERSION` | — | Required when `STEM_PROVIDER=replicate`; find hash at replicate.com/lucataco/demucs |
+| `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` | — | Clerk publishable key; **its presence flips `clerkEnabled` on**. Blank ⇒ auth UI hidden, app still builds/runs |
+| `CLERK_SECRET_KEY` | — | Clerk secret key (server). Required alongside the publishable key for real auth |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_URL` | `/sign-in` | Clerk sign-in route |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_URL` | `/sign-up` | Clerk sign-up route |
+| `NEXT_PUBLIC_CLERK_SIGN_IN_FALLBACK_REDIRECT_URL` | `/studio` | Post-sign-in landing (move to `/projects` in Phase D) |
+| `NEXT_PUBLIC_CLERK_SIGN_UP_FALLBACK_REDIRECT_URL` | `/studio` | Post-sign-up landing |
+| `DATABASE_URL` | — | Neon Postgres pooled connection string. Required for `db:migrate` and all DB access (Phase D+) |
+| `STORAGE_PROVIDER` | `vercel-blob` | `vercel-blob` (durable) or `local` (dev fallback → `public/projects`) |
+| `BLOB_READ_WRITE_TOKEN` | — | Required when `STORAGE_PROVIDER=vercel-blob` (Vercel → Storage → Blob) |
 ### Notes
 - **`ANALYSIS_PROVIDER` is no longer read.** Analysis is hardcoded to Gemini, so `GEMINI_API_KEY` is effectively required to use the app end-to-end. (`.env.example` no longer lists `ANALYSIS_PROVIDER`.)
 - Only the **music** factory still branches on an env var (`MUSIC_PROVIDER`, default `'mock'`).
@@ -1255,7 +1383,8 @@ All phases are complete. This checklist reflects the completed state.
 - [x] `app/providers.tsx` — QueryClientProvider wrapper (retry: 0)
 - [x] `app/globals.css` — Tailwind v4 imports, navy/cream token system (light + dark), shadcn CSS vars, fadeIn keyframe
 - [x] `app/layout.tsx` — Geist fonts, Providers, `dark` default class, metadata
-- [x] `app/page.tsx` — full single-page workflow with header/logo/theme-toggle, step indicator, hero, error banner
+- [x] `app/studio/page.tsx` — full workflow (step indicator, hero, error banner); moved from `app/page.tsx` in Phase A, header/footer now in the global shell
+- [x] `app/(marketing)/page.tsx` + `components/marketing/*` + `components/layout/{SiteHeader,SiteFooter}.tsx` — Phase A multi-page shell
 
 ### Phase 8 — Validation ✅
 - [x] `npm run build` passes with zero errors

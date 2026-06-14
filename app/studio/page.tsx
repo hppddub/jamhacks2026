@@ -6,8 +6,9 @@ import { AnalysisCard } from '@/components/analysis/AnalysisCard';
 import { ScoreOutput } from '@/components/player/ScoreOutput';
 import { DownloadButton } from '@/components/player/DownloadButton';
 import { StemPlayer } from '@/components/player/StemPlayer';
+import { SaveProjectControl } from '@/components/projects/SaveProjectControl';
 import { useWorkflow } from '@/hooks/useWorkflow';
-import { ThemeToggle } from '@/components/ThemeToggle';
+import { clerkEnabled } from '@/lib/auth';
 
 function Spinner({ label }: { label: string }) {
   return (
@@ -76,9 +77,12 @@ const STEP_ORDER: Record<string, number> = {
   completed: 3,
 };
 
-export default function Home() {
+export default function Studio() {
   const { state, selectFile, removeFile, upload, analyze, generate, separateStems, reset } = useWorkflow();
-  const { step, videoFile, videoObjectUrl, originalAudioUrl, analysis, score, error, stemStep, stems, stemError } = state;
+  const {
+    step, videoFile, videoObjectUrl, originalAudioUrl, uploadedVideoPath, uploadedMetadata,
+    analysis, score, error, stemStep, stems, stemError,
+  } = state;
 
   const isUploading = step === 'uploading';
   const isAnalyzing = step === 'analyzing';
@@ -88,25 +92,7 @@ export default function Home() {
   const currentOrder = STEP_ORDER[step] ?? -1;
 
   return (
-    <div className="min-h-screen bg-navy-950 text-cream-50">
-      {/* Header */}
-      <header className="sticky top-0 z-10 border-b border-navy-800 bg-navy-950/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-3xl items-center justify-between px-6 py-4">
-          <div className="flex items-center gap-3">
-            <img src="/banana-logo.svg" alt="BananaMOV logo" className="h-8 w-8" />
-            <span className="text-lg font-bold tracking-tight">BananaMOV</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 rounded-full border border-navy-700 bg-navy-900 px-3 py-1">
-              <div className="h-2 w-2 rounded-full bg-[#ffcc18]" />
-              <span className="text-xs font-medium text-cream-300">Powered by ElevenLabs</span>
-            </div>
-            <ThemeToggle />
-          </div>
-        </div>
-      </header>
-
-      <main className="mx-auto max-w-3xl space-y-8 px-6 py-12">
+    <main className="mx-auto max-w-3xl space-y-8 px-6 py-12">
         {/* Hero — idle only */}
         {step === 'idle' && (
           <div className="animate-fade-in space-y-3 pb-4 text-center">
@@ -286,6 +272,21 @@ export default function Home() {
             />
             <DownloadButton score={score} />
 
+            {/* Save to project (requires Clerk + a signed-in user) */}
+            {clerkEnabled && analysis && uploadedVideoPath && uploadedMetadata && (
+              <SaveProjectControl
+                base={{
+                  analysis,
+                  score,
+                  stems,
+                  originalAudioUrl,
+                  videoPath: uploadedVideoPath,
+                  videoFilename: uploadedMetadata.filename,
+                }}
+                defaultName={`${score.mood.charAt(0).toUpperCase()}${score.mood.slice(1)} ${score.genre}`}
+              />
+            )}
+
             {/* Stem separation */}
             {stemStep === 'idle' && (
               <button
@@ -324,13 +325,5 @@ export default function Home() {
           </section>
         )}
       </main>
-
-      <footer className="border-t border-navy-800 py-8 text-center">
-        <p className="text-xs text-cream-500">
-          Built for JamHacks 2026 &middot; Powered by{' '}
-          <span className="text-cream-400">ElevenLabs</span>
-        </p>
-      </footer>
-    </div>
   );
 }

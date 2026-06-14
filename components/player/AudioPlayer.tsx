@@ -5,9 +5,11 @@ import { formatDuration } from '@/lib/utils';
 
 interface AudioPlayerProps {
   src: string;
+  /** Header label; defaults to "Generated Score" for the existing score-player usage. */
+  label?: string;
 }
 
-export function AudioPlayer({ src }: AudioPlayerProps) {
+export function AudioPlayer({ src, label = 'Generated Score' }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -68,7 +70,7 @@ export function AudioPlayer({ src }: AudioPlayerProps) {
     <div className="animate-fade-in space-y-4 rounded-xl border border-navy-700 bg-navy-900 p-6">
       <div className="flex items-center gap-2">
         <div className="h-2 w-2 animate-pulse rounded-full bg-[#ffcc18]" />
-        <p className="text-sm font-medium text-cream-100">Generated Score</p>
+        <p className="text-sm font-medium text-cream-100">{label}</p>
         {!isLoaded && (
           <span className="ml-auto text-xs text-cream-400">Loading audio…</span>
         )}
