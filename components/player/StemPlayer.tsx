@@ -138,7 +138,7 @@ function StemRow({ stem }: { stem: Stem }) {
 
         <a
           href={stem.audioUrl}
-          download={`${stem.id}.mp3`}
+          download={stem.audioUrl.split('/').pop()}
           className="flex-shrink-0 rounded-md border border-navy-700 bg-navy-800 px-2.5 py-1 text-xs text-cream-200 transition-colors hover:bg-navy-700"
         >
           ↓

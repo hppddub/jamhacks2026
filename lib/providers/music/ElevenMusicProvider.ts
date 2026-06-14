@@ -58,6 +58,13 @@ export class ElevenMusicProvider implements MusicGenerationProvider {
     if (!response.ok) {
       const errorText = await response.text();
       console.error('[ElevenMusic] error body:', errorText);
+      if (response.status === 403) {
+        throw new Error(
+          'ElevenLabs Music API access not enabled on this key. ' +
+          'Enable "Music Generation" in your ElevenLabs dashboard, ' +
+          'or set MUSIC_PROVIDER=sound-generation in .env.local to use the sound-effects endpoint (max 22s).'
+        );
+      }
       throw new Error(`ElevenLabs Music ${response.status}: ${errorText || '(empty response)'}`);
     }
 
