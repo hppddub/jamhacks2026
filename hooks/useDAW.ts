@@ -27,22 +27,20 @@ function bpmToRate(bpm: number): number {
   return Math.max(0.25, Math.min(4, bpm / REFERENCE_BPM));
 }
 
+/** The mixer starts with only the Master strip; every track adds its own insert. */
 function makeInitialInserts(): MixerInsert[] {
-  const inserts: MixerInsert[] = [
-    { id: 'master', name: 'Master', volume: 1, pan: 0, muted: false, solo: false, effects: [] },
-  ];
-  for (let i = 1; i <= 4; i++) {
-    inserts.push({ id: generateId(), name: `Insert ${i}`, volume: 1, pan: 0, muted: false, solo: false, effects: [] });
-  }
-  return inserts;
+  return [{ id: 'master', name: 'Master', volume: 1, pan: 0, muted: false, solo: false, effects: [] }];
 }
 
-/** Creates a generic numbered track ("Track N") seeded with the item's clip.
- *  The track is just a lane — any library item (drums, melody, …) can later be
- *  dropped into it; the clip keeps the item's own colour/label. */
-function makeTrackFromItem(item: DAWLibraryItem, trackNumber: number): DAWTrack {
+/** Creates a generic numbered track ("Track N") seeded with the item's clip, PLUS its
+ *  own dedicated mixer insert. Each track is fully independent: its volume/pan/filters
+ *  never bleed into other tracks (two same-stem tracks stay separate). The clip keeps
+ *  the item's own colour/label. */
+function makeTrackWithInsert(item: DAWLibraryItem, trackNumber: number): { track: DAWTrack; insert: MixerInsert } {
   const trackId = generateId();
+  const insertId = generateId();
   const dur = item.durationSeconds ?? DEFAULT_CLIP_DURATION;
+  const color = TRACK_PALETTE[(trackNumber - 1) % TRACK_PALETTE.length];
   const clip: DAWClip = {
     id: generateId(),
     trackId,
@@ -55,13 +53,34 @@ function makeTrackFromItem(item: DAWLibraryItem, trackNumber: number): DAWTrack 
     offsetSeconds: 0,
     sourceDurationSeconds: dur,
   };
-  return {
+  const track: DAWTrack = {
     id: trackId,
     name: `Track ${trackNumber}`,
-    color: TRACK_PALETTE[(trackNumber - 1) % TRACK_PALETTE.length],
+    color,
     muted: false, solo: false, collapsed: false, volume: 1,
-    insertId: 'master',
+    insertId,
     clips: [clip],
+  };
+  const insert: MixerInsert = { id: insertId, name: `Track ${trackNumber}`, volume: 1, pan: 0, muted: false, solo: false, effects: [] };
+  return { track, insert };
+}
+
+/**
+ * Re-points a saved project's clips to the current durable audio URLs by matching
+ * `libraryItemId` to the freshly-seeded library items (blob URLs can change between
+ * sessions; settings/positions/filters are restored verbatim).
+ */
+function hydrateProject(saved: DAWProject, seedItems: DAWLibraryItem[]): DAWProject {
+  const urlById = new Map(seedItems.map(i => [i.id, i.audioUrl]));
+  const tracks = saved.tracks.map(t => ({
+    ...t,
+    clips: t.clips.map(c => ({ ...c, audioUrl: urlById.get(c.libraryItemId) ?? c.audioUrl })),
+  }));
+  return {
+    tracks,
+    inserts: saved.inserts?.length ? saved.inserts : makeInitialInserts(),
+    bpm: saved.bpm ?? DEFAULT_BPM,
+    totalDurationSeconds: saved.totalDurationSeconds ?? computeTotalDuration(tracks),
   };
 }
 
@@ -130,13 +149,19 @@ function triggerDownload(blob: Blob, filename: string) {
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
-export function useDAW(initialItems: DAWLibraryItem[]) {
-  const [project, setProject] = useState<DAWProject>(() => ({
-    tracks: [],
-    inserts: makeInitialInserts(),
-    bpm: DEFAULT_BPM,
-    totalDurationSeconds: EMPTY_TIMELINE_SECONDS,
-  }));
+export function useDAW(initialItems: DAWLibraryItem[], savedState?: DAWProject | null) {
+  // Only treat a saved state as valid when it actually carries a tracks array.
+  const hasSavedState = !!(savedState && Array.isArray(savedState.tracks));
+  const [project, setProject] = useState<DAWProject>(() =>
+    hasSavedState
+      ? hydrateProject(savedState as DAWProject, initialItems)
+      : {
+          tracks: [],
+          inserts: makeInitialInserts(),
+          bpm: DEFAULT_BPM,
+          totalDurationSeconds: EMPTY_TIMELINE_SECONDS,
+        }
+  );
   const [transport, setTransport] = useState<DAWTransportState>('stopped');
   const [currentTime, setCurrentTime] = useState(0);
   const [pxPerSecond, setPxPerSecond] = useState(80);
@@ -181,17 +206,24 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
     return stretched;
   }, []);
 
-  // Build initial tracks from library items (durations loaded async)
+  // Build initial tracks from library items (durations loaded async).
+  // Skipped when hydrating a saved project — its tracks/inserts are restored verbatim.
   useEffect(() => {
-    if (initialItems.length === 0) return;
+    if (hasSavedState || initialItems.length === 0) return;
     let cancelled = false;
     (async () => {
       const withDur = await Promise.all(
         initialItems.map(async (item) => ({ ...item, durationSeconds: await loadDuration(item.audioUrl) }))
       );
       if (cancelled) return;
-      const tracks = withDur.map((item, i) => makeTrackFromItem(item, i + 1));
-      setProject(prev => ({ ...prev, tracks, totalDurationSeconds: computeTotalDuration(tracks) }));
+      const built = withDur.map((item, i) => makeTrackWithInsert(item, i + 1));
+      const tracks = built.map(b => b.track);
+      setProject(prev => ({
+        ...prev,
+        tracks,
+        inserts: [...prev.inserts, ...built.map(b => b.insert)],
+        totalDurationSeconds: computeTotalDuration(tracks),
+      }));
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -390,8 +422,9 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
 
   const addTrackFromLibrary = useCallback((item: DAWLibraryItem) => {
     setProject(prev => {
-      const tracks = [...prev.tracks, makeTrackFromItem(item, prev.tracks.length + 1)];
-      return { ...prev, tracks, totalDurationSeconds: computeTotalDuration(tracks) };
+      const { track, insert } = makeTrackWithInsert(item, prev.tracks.length + 1);
+      const tracks = [...prev.tracks, track];
+      return { ...prev, tracks, inserts: [...prev.inserts, insert], totalDurationSeconds: computeTotalDuration(tracks) };
     });
   }, []);
 
@@ -406,8 +439,14 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
     }
     trackGainsRef.current.delete(trackId);
     setProject(prev => {
+      const removed = prev.tracks.find(t => t.id === trackId);
       const tracks = prev.tracks.filter(t => t.id !== trackId);
-      return { ...prev, tracks, totalDurationSeconds: computeTotalDuration(tracks) };
+      // Prune the track's dedicated insert (unless it's master or still routed to by another track).
+      let inserts = prev.inserts;
+      if (removed && removed.insertId !== 'master' && !tracks.some(t => t.insertId === removed.insertId)) {
+        inserts = prev.inserts.filter(i => i.id !== removed.insertId);
+      }
+      return { ...prev, tracks, inserts, totalDurationSeconds: computeTotalDuration(tracks) };
     });
   }, []);
 
@@ -590,12 +629,13 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
 
   // ── Export ─────────────────────────────────────────────────────────────────
 
-  const exportMix = useCallback(async () => {
+  /** Offline-renders the full mix (tracks → inserts → effects → master) to a WAV Blob. */
+  const renderMasterBlob = useCallback(async (): Promise<Blob> => {
     const proj = projectRef.current;
     const sr = 44100;
     const rate = bpmToRate(proj.bpm);
     // Rendered timeline is compressed/expanded by the tempo.
-    const totalSamples = Math.ceil((proj.totalDurationSeconds / rate) * sr);
+    const totalSamples = Math.max(1, Math.ceil((proj.totalDurationSeconds / rate) * sr));
     const offCtx = new OfflineAudioContext(2, totalSamples, sr);
 
     const { inserts } = buildMixGraph(offCtx, proj);
@@ -629,8 +669,12 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
     }
 
     const rendered = await offCtx.startRendering();
-    triggerDownload(audioBufferToWav(rendered), 'bananamov-mix.wav');
+    return audioBufferToWav(rendered);
   }, []);
+
+  const exportMix = useCallback(async () => {
+    triggerDownload(await renderMasterBlob(), 'bananamov-mix.wav');
+  }, [renderMasterBlob]);
 
   const exportTrack = useCallback(async (trackId: string) => {
     const track = projectRef.current.tracks.find(t => t.id === trackId);
@@ -668,6 +712,6 @@ export function useDAW(initialItems: DAWLibraryItem[]) {
     setInsertVolume, setInsertPan, toggleInsertMute, toggleInsertSolo, addInsert,
     addEffect, removeEffect, toggleEffect, updateEffectParam,
     // export
-    exportMix, exportTrack, saveProject,
+    exportMix, exportTrack, saveProject, renderMasterBlob,
   };
 }

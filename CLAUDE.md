@@ -80,13 +80,14 @@ jamhacks2026/
 │   │   ├── Arrangement.tsx               ← scrollable timeline: bar/beat ruler+grid, sticky headers, snapping clips, insert routing, playhead
 │   │   ├── Knob.tsx                       ← SVG rotary knob (drag/scroll) — used by the ADSR Filter Envelope plugin
 │   │   ├── Mixer.tsx                      ← bottom-dock FL-style mixer: insert strips + selected insert's effect rack (knobs + ADSR curve for filter-adsr)
-│   │   └── ExportPanel.tsx               ← collapsible export/import section (audio import, WAV mix, per-track MP3, save project JSON)
+│   │   ├── ExportPanel.tsx               ← collapsible export/import section (audio import, WAV mix, per-track MP3, save project JSON)
+│   │   └── DAW.tsx                        ← reusable DAW shell {seedItems, savedState?, projectId?} — Save Master + autosave when project-bound
 │   └── ui/                                ← shadcn/ui generated (never edit manually)
 ├── hooks/
 │   ├── useWorkflow.ts                     ← state machine + all TanStack Query mutations
 │   ├── useSaveProject.ts                  ← POST /api/projects mutation (returns projectId)
 │   ├── useProjects.ts                     ← useRenameProject / useDeleteProject (→ router.refresh())
-│   └── useDAW.ts                          ← DAW engine: project, transport, Web Audio scheduling + mixer graph + effects, time-stretch, clip tools, export
+│   └── useDAW.ts                          ← DAW engine: per-track inserts, saved-state hydration, scheduling + mixer graph + effects, time-stretch, clip tools, renderMasterBlob
 ├── lib/
 │   ├── providers/
 │   │   ├── types.ts                       ← VideoAnalysisProvider + MusicGenerationProvider interfaces
@@ -234,7 +235,7 @@ Auth is **guarded** so the app builds and runs whether or not Clerk keys are set
 Persistence layer for saved projects. **No table is written yet** — Phase C is schema + client + storage only; the save/read flow lands in Phase D.
 
 - **`lib/db/schema.ts`** (`drizzle-orm/pg-core`): two tables.
-  - `projects`: `id` (uuid pk, `gen_random_uuid()`), `user_id` (Clerk id), `name`, `status` (`'saved'`), denormalized `duration_s`/`bpm`/`genre`/`mood`, `analysis` jsonb (`$type<AnalysisResult>`), `score` jsonb (`$type<GeneratedScore>`), `mix_state` jsonb (reserved for Phase E), `created_at`/`updated_at` timestamptz; index on `(user_id, created_at)`.
+  - `projects`: `id` (uuid pk, `gen_random_uuid()`), `user_id` (Clerk id), `name`, `status` (`'saved'`), denormalized `duration_s`/`bpm`/`genre`/`mood`, `analysis` jsonb (`$type<AnalysisResult>`), `score` jsonb (`$type<GeneratedScore>`), `mix_state` jsonb (the saved DAW arrangement — full `DAWProject`: bpm/tracks/clips/positions/inserts/effects; written by DAW autosave + Save Master), `created_at`/`updated_at` timestamptz; index on `(user_id, created_at)`.
   - `project_files`: `id`, `project_id` (fk → projects, **on delete cascade**), `kind` (`source_video`|`original_audio`|`score`|`stem`), `stem_id` (nullable), `url` (object-storage URL), `filename`/`size_bytes`/`mime_type`, `created_at`; index on `project_id`.
   - Exports inferred row types: `ProjectRow`/`NewProjectRow`/`ProjectFileRow`/`NewProjectFileRow`.
 - **`lib/db/index.ts`**: `db = drizzle(neon(DATABASE_URL), { schema })` over the Neon serverless HTTP driver. **Throws at import if `DATABASE_URL` is unset** — safe because only on-demand server code imports it (never static prerender).
@@ -271,10 +272,12 @@ A "project" is one **saved generation**, owned by a Clerk user. Reads are React 
 A full browser **Web-Audio DAW** (imported from `origin/maxim`) replaced the Phase E `MixWorkspace` placeholder. It loads a saved project's tracks, lets you arrange/mix/master, and saves a rendered master back to the project.
 
 - **Handoff contract** `MixSession` (`types/index.ts`): `{ projectId, bpm, keyMode?, durationSeconds, tracks: MixTrack[] }`, `MixTrack = { id, label, kind: 'score'|'original'|'stem', url }`. Built by **`lib/mix/buildMixSession.ts`** (tracks ordered score → stems → original). `mixSessionToDAWSeed(session)` adapts it to the DAW's `DAWLibraryItem[]`.
-- **`/mix/[projectId]`** (RSC, gated by `'/mix(.*)'`): `auth()` → `getProject(id, userId)` (`notFound()` otherwise) → `buildMixSession` → `mixSessionToDAWSeed` → renders **`<DAWWorkspace>` full-bleed** (`h-[calc(100vh-65px)]`, i.e. viewport minus the global header — the page returns the DAW directly, not inside the `max-w-3xl` container). Verified gated live.
-- **The DAW** (`components/daw/*`, engine `hooks/useDAW.ts`, audio graph `lib/audio/dawGraph.ts`, types `types/daw.ts`): tracks/clips arrangement, per-track + insert mixer with effects (eq/reverb/delay/compressor/distortion), Web Audio playback (`AudioContext` + `AudioBufferSourceNode`), and **offline render** (`OfflineAudioContext` → WAV). `useDAW(seedItems, savedProject?)` seeds tracks from items, or **restores a saved session** from `mix_state` (validated; falls back to seeding). `fetch`+`decodeAudioData` works on cross-origin Blob URLs (Blob serves `ACAO: *`).
-- **`DAWWorkspace`** (`components/daw/DAWWorkspace.tsx`, extracted from the standalone page): props `{ seedItems, projectId?, projectName?, savedState? }`; toolbar with back-to-project + **"Save master to project"** (only when `projectId`). `app/daw/page.tsx` remains a thin **public** URL-seeded wrapper (`?score=&original=&stems=drums:…`).
-- **Export & save master:** `useDAW.renderMixBlob()` → `useSaveMaster` POSTs the WAV + DAW session JSON to **`POST /api/projects/[id]/master`** (auth+ownership) → `storage.uploadBytes(buf, '{id}/master.wav', 'audio/wav')` → replaces any existing `project_files` row `kind:'master'` (and its blob) → persists the session to `projects.mix_state` (`setProjectMixState`). `ProjectFileKind` gained `'master'` (free text, **no migration**); `Project.mixState` is plumbed via `rowToProject`. The detail page shows a **"Download mastered mix (.wav)"** link when a master exists.
+- **`/mix/[projectId]`** (RSC, gated by `'/mix(.*)'`): `auth()` → `getProject(id, userId)` (`notFound()` otherwise) → `buildMixSession` → `mixSessionToDAWSeed` → renders **`<DAW>`** (the reusable client DAW, `components/daw/DAW.tsx`) seeded from the project's durable audio **and** restored from `mix_state` (`savedState`), bound to `projectId`. Verified gated live.
+- **The DAW** (`components/daw/*`, engine `hooks/useDAW.ts`, audio graph `lib/audio/dawGraph.ts`, types `types/daw.ts`): tracks/clips arrangement, **per-track dedicated mixer inserts** with effects (eq/reverb/delay/compressor/distortion/filter-adsr), Web Audio playback (`AudioContext` + `AudioBufferSourceNode`), and **offline render** (`OfflineAudioContext` → WAV via `renderMasterBlob()`). `useDAW(seedItems, savedState?)` seeds tracks from items, or **restores a saved session** from `mix_state` (validated via `hydrateProject`, re-pointing clip URLs by `libraryItemId`; falls back to seeding). `fetch`+`decodeAudioData` works on cross-origin Blob URLs (Blob serves `ACAO: *`).
+- **`DAW`** (`components/daw/DAW.tsx`): the shared DAW shell, props `{ seedItems, savedState?, projectId?, projectName?, backHref? }`. When `projectId` is set (i.e. on `/mix/[id]`) it shows a header **"Save Master"** button and **autosaves** edits. `app/daw/page.tsx` renders it as a thin **public** URL-seeded wrapper (`?score=&original=&stems=drums:…`, no project binding).
+- **Save / autosave:**
+  - **Autosave** (settings only, cheap): a debounced (1.5 s) `useEffect` on `project` PATCHes `PATCH /api/projects/[id]` with `{ mixState: project }` → `setProjectMixState`. Persists bpm, tracks, clips, positions/trims, inserts, effects/filters, routing.
+  - **Save Master** (rendered audio): `renderMasterBlob()` → `POST /api/projects/[id]/master` (FormData `master` WAV + `mixState`) → `storage.uploadBytes(buf, '{id}/master.wav', 'audio/wav')`, replaces any existing `project_files` row `kind:'master'`, and re-persists `mix_state`. The detail page shows a **"Download mastered mix (.wav)"** link when a master exists.
 - **Storage:** `StorageProvider` gained **`uploadBytes(data, key, contentType)`** (for in-memory renders); `upload(localPath,…)` now delegates to it.
 - **Entry points:** `/projects/[id]` → **"Open Mixing →"** link; studio → **"Save & open mixing →"** (`SaveProjectDialog` `redirectTo: 'project'|'mix'`).
 
@@ -1357,9 +1360,9 @@ Full viewport — no scrolling page. `h-screen flex-col overflow-hidden`:
 
 ### State — `hooks/useDAW.ts`
 
-All DAW state lives in `useDAW(initialItems: DAWLibraryItem[])`. No TanStack Query — no server mutations in the DAW. The hook:
+All DAW state lives in `useDAW(initialItems: DAWLibraryItem[], savedState?: DAWProject | null)`. No TanStack Query for the engine itself. The hook:
 
-- **Initialisation:** on mount, loads each seed library item's duration via a hidden `<Audio>` element; builds one **generic numbered `DAWTrack`** per item (`name: 'Track N'`, colour from `TRACK_PALETTE`) with one `DAWClip` at `startSeconds=0`, routed to `'master'`. Tracks are plain lanes — **any library item can be dragged into any track** (drums + melody can share one); each clip keeps its own colour/label. Imported items only populate the library, not tracks.
+- **Initialisation:** with a valid `savedState`, restores it verbatim (`hydrateProject`, re-pointing clip URLs by `libraryItemId`). Otherwise, on mount, loads each seed item's duration via a hidden `<Audio>` element and builds one **generic numbered `DAWTrack`** per item (`name: 'Track N'`, colour from `TRACK_PALETTE`) with one `DAWClip` at `startSeconds=0`. **Each track gets its own dedicated mixer insert** (`makeTrackWithInsert`) so volume/pan/filters are independent per track. Tracks are plain lanes — **any library item can be dragged into any track**; each clip keeps its own colour/label. Imported items only populate the library, not tracks.
 - **Timeline length:** `computeTotalDuration()` = the **end of the last clip** (max `startSeconds + durationSeconds`), no floor/padding; falls back to `EMPTY_TIMELINE_SECONDS = 30` when there are no clips. (Was floored at 60 s +10 s, which showed a misleading 1:10 default.)
 - **Audio engine + single clock:** Web Audio API (`AudioContext`). On `play()` it captures **one** `ctx.currentTime + LOOKAHEAD` (0.06 s) into `playStartCtxRef`, schedules all `AudioBufferSourceNode`s off that value, and the RAF loop derives `currentTime = (ctx.currentTime − playStartCtxRef) × rate + offset`. **The playhead and the top-left readout both read this single `currentTime`**, so they stay paired. `pause()` suspends; `stop()` resets to 0; `seek()` restarts scheduling from the new offset if playing.
   - **Playhead/pause race fix:** `transportRef.current` is set **imperatively** in `play()`/`pause()`/`stop()` (and the end-of-track branch), not just via a `useEffect`. Previously the first RAF tick could fire before the transport effect committed and bail (`transportRef !== 'playing'`), freezing the playhead and making pause look like a reset. Setting the ref imperatively before `startRaf()` removes the race.
@@ -1432,7 +1435,7 @@ Each effect compiles to a Web Audio sub-graph via `buildEffect(ctx, effect, opts
 - `DEFAULT_BPM = 120`, `DEFAULT_CLIP_DURATION = 30` s, `EMPTY_TIMELINE_SECONDS = 30` s (empty-project placeholder; total otherwise = last clip end)
 - `TRACK_PALETTE` = 7 colours cycled for generic "Track N" lanes
 - `MIN_CLIP_SECONDS = 0.1` (trim/split floor), `TRIM_HANDLE_PX = 6`, waveform peak buckets = `2000`
-- Mixer dock height `240` px; initial inserts = Master + 4
+- Mixer dock height `240` px; inserts = **Master + one dedicated insert per track** (auto-created/pruned); autosave debounce `1500` ms
 
 ---
 
